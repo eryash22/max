@@ -1,0 +1,43 @@
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+frontend/.package-manager
+frontend/tsconfig.tsbuildinfo
+
+# Coverage / test artifacts
+coverage/
+htmlcov/
+.coverage
+
+# Local database / storage / uploads — real documents, import files and the
+# WhatsApp browser session profile all live here at runtime; never committed.
+backend/storage/
+*.sqlite3
+*.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+.vercel
