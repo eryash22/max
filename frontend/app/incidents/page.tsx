@@ -22,6 +22,7 @@ export default function IncidentsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [severity, setSeverity] = useState("");
   const [branchId, setBranchId] = useState("");
+  const [sortBy, setSortBy] = useState("date_desc");
 
   // Restructure consolidation pass, Part B — hydrate filters from the URL on mount so
   // drill-down links (e.g. from the Branch detail page's "Open incidents" tile, or the
@@ -47,6 +48,29 @@ export default function IncidentsPage() {
   const { data, page, setPage, loading, error, reload } = usePaginatedResource<Incident>("/api/v1/incidents", query);
   const branches = useLookup<Branch>("/api/v1/branches");
   const branchName = (id: string) => branches.find((b) => b.id === id)?.name ?? id;
+
+  // Client-side sort over the current page's rows — the backend already orders by
+  // newest-first, so "Date (newest)" needs no extra work; the other options just
+  // re-sort what's already loaded rather than adding a second server-side ordering
+  // param for a handful of columns.
+  const sortedItems = data
+    ? [...data.items].sort((a, b) => {
+        switch (sortBy) {
+          case "date_asc":
+            return a.created_at.localeCompare(b.created_at);
+          case "date_desc":
+            return b.created_at.localeCompare(a.created_at);
+          case "status":
+            return a.status.localeCompare(b.status);
+          case "severity":
+            return a.severity.localeCompare(b.severity);
+          case "branch":
+            return branchName(a.branch_id).localeCompare(branchName(b.branch_id));
+          default:
+            return 0;
+        }
+      })
+    : [];
   const { hasPermission } = useAuth();
   const canManage = hasPermission("incident.manage");
   const canForceDelete = hasPermission("dev.data_cleanup");
@@ -109,6 +133,13 @@ export default function IncidentsPage() {
             </option>
           ))}
         </select>
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+          <option value="date_desc">Sort: Date (newest)</option>
+          <option value="date_asc">Sort: Date (oldest)</option>
+          <option value="status">Sort: Status</option>
+          <option value="severity">Sort: Severity</option>
+          <option value="branch">Sort: Branch</option>
+        </select>
       </div>
 
       {rowError && <ErrorState message={rowError} />}
@@ -119,9 +150,21 @@ export default function IncidentsPage() {
           <DataTable<Incident>
             columns={[
               {
+                key: "date",
+                header: "Date",
+                render: (i) => new Date(i.created_at).toLocaleDateString(),
+              },
+              {
                 key: "description",
                 header: "Description",
-                render: (i) => <Link href={`/incidents/${i.id}`}>{i.description}</Link>,
+                render: (i) => (
+                  <Link
+                    href={`/incidents/${i.id}`}
+                    style={{ display: "inline-block", whiteSpace: "normal", wordBreak: "break-word", maxWidth: 480 }}
+                  >
+                    {i.description}
+                  </Link>
+                ),
               },
               { key: "branch", header: "Branch", render: (i) => branchName(i.branch_id) },
               { key: "severity", header: "Severity", render: (i) => <StatusBadge value={i.severity} /> },
@@ -152,7 +195,7 @@ export default function IncidentsPage() {
                   ]
                 : []),
             ]}
-            rows={data.items}
+            rows={sortedItems}
             emptyLabel="No incidents found."
           />
           <Pagination page={page} pageSize={data.page_size} total={data.total} onPageChange={setPage} />

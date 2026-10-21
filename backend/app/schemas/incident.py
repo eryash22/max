@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 from .asset_lifecycle import ContractCoverageOut
@@ -88,6 +90,7 @@ class IncidentCoverageOut(BaseModel):
 
 class IncidentOut(BaseModel):
     id: str
+    created_at: datetime
     branch_id: str
     department_id: str | None = None
     location_id: str | None = None

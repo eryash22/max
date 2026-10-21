@@ -644,6 +644,7 @@ export interface IncidentCoverage {
 
 export interface Incident {
   id: string;
+  created_at: string;
   branch_id: string;
   department_id: string | null;
   location_id: string | null;
