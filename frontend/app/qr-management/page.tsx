@@ -7,6 +7,7 @@ import { ProtectedShell } from "../../components/ProtectedShell";
 import { DataTable } from "../../components/DataTable";
 import { Pagination } from "../../components/Pagination";
 import { SearchBar } from "../../components/SearchBar";
+import { StatusBadge } from "../../components/StatusBadge";
 import { LoadingState } from "../../components/LoadingState";
 import { ErrorState } from "../../components/ErrorState";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -178,7 +179,8 @@ export default function QrManagementPage() {
               { key: "device_name", header: "Device", render: (a) => a.device_name },
               { key: "serial_number", header: "Serial number", render: (a) => a.serial_number ?? "-" },
               { key: "branch_name", header: "Branch", render: (a) => a.branch_name ?? "-" },
-              { key: "status", header: "Status", render: (a) => a.status },
+              { key: "vendor_name", header: "Vendor", render: (a) => a.vendor_name ?? "-" },
+              { key: "status", header: "Status", render: (a) => <StatusBadge value={a.status} /> },
               {
                 key: "qr_status",
                 header: "QR status",

@@ -60,6 +60,7 @@ class QrAssetStatusOut(BaseModel):
     serial_number: str | None = None
     device_name: str
     branch_name: str | None = None
+    vendor_name: str | None = None
     status: str
     has_qr: bool
     qr_active: bool

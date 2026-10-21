@@ -1413,6 +1413,18 @@ textarea:disabled {
   .qr-label-grid {
     grid-template-columns: repeat(3, 1fr);
   }
+  /* Printing from inside the authenticated app shell (e.g. QR label preview)
+     must print only the page content — not the sidebar/top nav chrome around
+     it, which browsers otherwise happily include since they're just more
+     elements on the page. */
+  .sidebar,
+  .top-nav {
+    display: none !important;
+  }
+  .app-shell__content {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
 }
 
 /* Device QR Code Management System — public scan page. Unauthenticated, so it
@@ -1449,6 +1461,24 @@ textarea:disabled {
 
 .scan-page__section {
   margin-bottom: 20px;
+  border-left: 3px solid var(--color-primary);
+  padding-left: 12px;
+}
+
+.scan-page__section:nth-of-type(2) {
+  border-left-color: var(--color-info, #2563eb);
+}
+
+.scan-page__section:nth-of-type(3) {
+  border-left-color: var(--color-success, #16a34a);
+}
+
+.scan-page__section:nth-of-type(4) {
+  border-left-color: var(--color-warning, #d97706);
+}
+
+.scan-page__section:nth-of-type(5) {
+  border-left-color: var(--color-danger, #dc2626);
 }
 
 .scan-page__section h2 {

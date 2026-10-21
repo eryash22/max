@@ -443,6 +443,7 @@ export interface QrAssetStatus {
   serial_number: string | null;
   device_name: string;
   branch_name: string | null;
+  vendor_name: string | null;
   status: string;
   has_qr: boolean;
   qr_active: boolean;

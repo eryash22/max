@@ -38,6 +38,12 @@ class IncidentIn(BaseModel):
 
 
 class IncidentUpdateIn(BaseModel):
+    branch_id: str | None = None
+    asset_id: str | None = None
+    created_at: datetime | None = None
+    clinical_impact: str | None = None
+    patient_care_impact: str | None = None
+    device_status_at_report: str | None = None
     assigned_engineer_id: str | None = None
     assigned_vendor_id: str | None = None
     resolution: str | None = None

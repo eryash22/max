@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { StatusBadge } from "../../../../components/StatusBadge";
 import { api, ApiError } from "../../../../lib/api";
 import type { QrPublicPage } from "../../../../types";
 
@@ -92,7 +93,7 @@ export default function PublicDeviceScanPage() {
                   {fields.map((field) => (
                     <div className="scan-page__field" key={field.key}>
                       <dt>{field.label}</dt>
-                      <dd>{field.value}</dd>
+                      <dd>{field.key === "status" ? <StatusBadge value={field.value} /> : field.value}</dd>
                     </div>
                   ))}
                 </dl>

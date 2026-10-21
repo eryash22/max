@@ -32,12 +32,14 @@ def _get_asset_or_404(db: Session, asset_id: str) -> Asset:
 
 def _to_asset_status_out(db: Session, asset: Asset) -> QrAssetStatusOut:
     branch = db.get(Branch, asset.branch_id) if asset.branch_id else None
+    vendor_name = qr_service.primary_vendor_name(db, asset.device_model_id) if asset.device_model_id else None
     return QrAssetStatusOut(
         asset_id=asset.id,
         asset_number=asset.asset_number,
         serial_number=asset.serial_number,
         device_name=asset.device_model.name if asset.device_model else "",
         branch_name=branch.name if branch else None,
+        vendor_name=vendor_name,
         status=asset.status,
         has_qr=bool(asset.qr_token),
         qr_active=asset.qr_active,

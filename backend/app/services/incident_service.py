@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from ..audit.service import record as audit_record
+from ..models.device import Asset
+from ..models.hospital import Branch
 from ..models.identity import User
 from ..models.incident import Incident, IncidentStatusHistory
 from ..schemas.incident import IncidentAssignIn, IncidentIn, IncidentStatusChangeIn, IncidentUpdateIn
@@ -65,6 +67,10 @@ def create_incident(db: Session, payload: IncidentIn, *, reported_by: str) -> In
 def update_incident(db: Session, incident: Incident, payload: IncidentUpdateIn, *, user_id: str) -> Incident:
     before = {c.name: getattr(incident, c.name) for c in incident.__table__.columns}
     changes = payload.model_dump(exclude_unset=True)
+    if "branch_id" in changes and changes["branch_id"] is not None and db.get(Branch, changes["branch_id"]) is None:
+        raise IncidentServiceError("branch_id does not reference a known branch")
+    if "asset_id" in changes and changes["asset_id"] is not None and db.get(Asset, changes["asset_id"]) is None:
+        raise IncidentServiceError("asset_id does not reference a known asset")
     for field, value in changes.items():
         setattr(incident, field, value)
 

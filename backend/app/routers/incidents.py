@@ -6,10 +6,11 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..dependencies.auth import require_permission
-from ..models.device import Asset
+from ..models.device import Asset, DeviceModel
 from ..models.documents import Document, DocumentLink
 from ..models.hospital import Branch
 from ..models.incident import Incident, IncidentStatusHistory
+from ..models.vendor import DeviceModelVendor, Vendor
 from ..schemas.auth import CurrentUser
 from ..schemas.common import Page
 from ..schemas.incident import (
@@ -96,7 +97,31 @@ def list_incidents(
 
     if search:
         like = f"%{search}%"
-        query = query.filter(or_(Incident.description.ilike(like), Incident.problem_category.ilike(like)))
+        # Searches every column the Incidents list page actually displays, not just
+        # description/category — device name, branch and vendor need joins since
+        # they aren't stored on Incident directly (Vendor via the device model's
+        # primary/alternative mapping, same as qr_service.primary_vendor_name).
+        query = (
+            query.outerjoin(Asset, Incident.asset_id == Asset.id)
+            .outerjoin(DeviceModel, Asset.device_model_id == DeviceModel.id)
+            .outerjoin(Branch, Incident.branch_id == Branch.id)
+            .outerjoin(DeviceModelVendor, DeviceModelVendor.device_model_id == Asset.device_model_id)
+            .outerjoin(Vendor, Vendor.id == DeviceModelVendor.vendor_id)
+            .filter(
+                or_(
+                    Incident.description.ilike(like),
+                    Incident.problem_category.ilike(like),
+                    Incident.resolution.ilike(like),
+                    Incident.cer_number.ilike(like),
+                    Incident.indent_number.ilike(like),
+                    Incident.po_number.ilike(like),
+                    DeviceModel.name.ilike(like),
+                    Branch.name.ilike(like),
+                    Vendor.name.ilike(like),
+                )
+            )
+            .distinct()
+        )
 
     if created_after:
         query = query.filter(Incident.created_at >= datetime.fromisoformat(created_after))
@@ -179,7 +204,10 @@ def get_incident_history(incident_id: str, db: Session = Depends(get_db),
 def patch_incident(incident_id: str, payload: IncidentUpdateIn, db: Session = Depends(get_db),
                     current_user: CurrentUser = Depends(require_permission(INCIDENT_MANAGE))):
     incident = _get_or_404(db, incident_id)
-    return update_incident(db, incident, payload, user_id=current_user.id)
+    try:
+        return update_incident(db, incident, payload, user_id=current_user.id)
+    except IncidentServiceError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
 @router.delete("/{incident_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -11,6 +11,7 @@ import { ConfirmDialog } from "../../../components/ConfirmDialog";
 import { useAuth } from "../../../hooks/useAuth";
 import { useLookup } from "../../../hooks/useLookup";
 import { useUserDirectory } from "../../../hooks/useUserDirectory";
+import { useAssetVendorMap } from "../../../hooks/useDeviceVendorInfo";
 import { api, ApiError } from "../../../lib/api";
 import type { Asset, Branch, DeviceModel, Incident, IncidentStatusHistoryEntry, Vendor } from "../../../types";
 import { INCIDENT_STATUSES } from "../../../types";
@@ -32,12 +33,21 @@ export default function IncidentDetailPage() {
   };
   const users = useUserDirectory();
   const userName = (id: string | null) => (id ? users.find((u) => u.id === id)?.name ?? id : "Unassigned");
+  // The device's own primary/alternative vendor (DeviceModelVendor, rank 0 = primary)
+  // — used to pre-select Assign's vendor dropdown so a BME doesn't have to look up
+  // and pick the vendor manually every time; they can still override it.
+  const assetVendorByModel = useAssetVendorMap(vendors);
   const [incident, setIncident] = useState<Incident | null>(null);
   const [history, setHistory] = useState<IncidentStatusHistoryEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [editingDetails, setEditingDetails] = useState(false);
+  const deviceVendorId = (() => {
+    const asset = incident?.asset_id ? assets.find((a) => a.id === incident.asset_id) : undefined;
+    return asset ? assetVendorByModel.get(asset.device_model_id)?.id : undefined;
+  })();
 
   const canManage = hasPermission("incident.manage");
   // No DELETE endpoint exists for incidents by design — they can be referenced by
@@ -131,6 +141,31 @@ export default function IncidentDetailPage() {
       await load();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "Failed to cancel incident.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDetailsUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setActionError(null);
+    setBusy(true);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    try {
+      const dateValue = formData.get("created_at");
+      await api.patch(`/api/v1/incidents/${params.id}`, {
+        branch_id: formData.get("branch_id") || undefined,
+        asset_id: formData.get("asset_id") || null,
+        created_at: dateValue ? `${dateValue}T00:00:00` : undefined,
+        clinical_impact: formData.get("clinical_impact") || null,
+        patient_care_impact: formData.get("patient_care_impact") || null,
+        device_status_at_report: formData.get("device_status_at_report") || null,
+      });
+      setEditingDetails(false);
+      await load();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Failed to update incident details.");
     } finally {
       setBusy(false);
     }
@@ -235,97 +270,163 @@ export default function IncidentDetailPage() {
       )}
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <h3 style={{ marginTop: 0 }}>Details</h3>
-        <table className="data-table">
-          <tbody>
-            <tr>
-              <td>Branch</td>
-              <td>{branchName(incident.branch_id)}</td>
-            </tr>
-            <tr>
-              <td>Asset</td>
-              <td>
-                {incident.asset_id ? (
-                  <Link href={`/assets/${incident.asset_id}`}>{assetLabel(incident.asset_id)}</Link>
-                ) : (
-                  "Not linked"
-                )}
-              </td>
-            </tr>
-            <tr>
-              <td>Clinical impact</td>
-              <td>{incident.clinical_impact ?? "-"}</td>
-            </tr>
-            <tr>
-              <td>Patient-care impact</td>
-              <td>{incident.patient_care_impact ?? "-"}</td>
-            </tr>
-            <tr>
-              <td>Assigned engineer</td>
-              <td>{userName(incident.assigned_engineer_id)}</td>
-            </tr>
-            <tr>
-              <td>Assigned vendor</td>
-              <td>{vendorName(incident.assigned_vendor_id)}</td>
-            </tr>
-            <tr>
-              <td>Root cause</td>
-              <td>{incident.root_cause ?? "Not recorded"}</td>
-            </tr>
-            <tr>
-              <td>Resolution</td>
-              <td>{incident.resolution ?? "Not recorded"}</td>
-            </tr>
-            <tr>
-              <td>Downtime (hours)</td>
-              <td>{incident.downtime_hours ?? "Not recorded"}</td>
-            </tr>
-            <tr>
-              <td>CER No.</td>
-              <td>{incident.cer_number ?? "-"}</td>
-            </tr>
-            <tr>
-              <td>Indent No.</td>
-              <td>{incident.indent_number ?? "-"}</td>
-            </tr>
-            <tr>
-              <td>PO No.</td>
-              <td>{incident.po_number ?? "-"}</td>
-            </tr>
-            <tr>
-              <td>PO closure date</td>
-              <td>{incident.po_closure_date ?? "-"}</td>
-            </tr>
-            <tr>
-              <td>PO cost (excl. GST)</td>
-              <td>{incident.po_cost_excl_gst != null ? `₹${incident.po_cost_excl_gst.toLocaleString("en-IN")}` : "-"}</td>
-            </tr>
-            <tr>
-              <td>PO GST %</td>
-              <td>{incident.po_gst_percent ?? "-"}</td>
-            </tr>
-            <tr>
-              <td>PO amount (incl. GST)</td>
-              <td>{incident.po_amount != null ? `₹${incident.po_amount.toLocaleString("en-IN")}` : "-"}</td>
-            </tr>
-            <tr>
-              <td>Vendor estimate (excl. GST)</td>
-              <td>
-                {incident.vendor_estimate_cost_excl_gst != null
-                  ? `₹${incident.vendor_estimate_cost_excl_gst.toLocaleString("en-IN")}`
-                  : "-"}
-              </td>
-            </tr>
-            <tr>
-              <td>Vendor estimate (incl. GST)</td>
-              <td>
-                {incident.vendor_estimate_cost_incl_gst != null
-                  ? `₹${incident.vendor_estimate_cost_incl_gst.toLocaleString("en-IN")}`
-                  : "-"}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h3 style={{ marginTop: 0 }}>Details</h3>
+          {canManage && !editingDetails && (
+            <button type="button" className="btn btn--ghost" onClick={() => setEditingDetails(true)}>
+              Edit
+            </button>
+          )}
+        </div>
+
+        {editingDetails ? (
+          <form onSubmit={handleDetailsUpdate} className="form-grid">
+            <div className="form-field">
+              <label>Branch</label>
+              <select name="branch_id" defaultValue={incident.branch_id} required>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-field">
+              <label>Asset</label>
+              <select name="asset_id" defaultValue={incident.asset_id ?? ""}>
+                <option value="">Not linked</option>
+                {assets.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {assetLabel(a.id)} ({a.asset_number ?? "no asset number"})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-field">
+              <label>Date reported</label>
+              <input name="created_at" type="date" defaultValue={incident.created_at.slice(0, 10)} />
+            </div>
+            <div className="form-field">
+              <label>Clinical impact</label>
+              <input name="clinical_impact" defaultValue={incident.clinical_impact ?? ""} />
+            </div>
+            <div className="form-field">
+              <label>Patient-care impact</label>
+              <input name="patient_care_impact" defaultValue={incident.patient_care_impact ?? ""} />
+            </div>
+            <div className="form-field">
+              <label>Device status at report</label>
+              <input name="device_status_at_report" defaultValue={incident.device_status_at_report ?? ""} />
+            </div>
+            <div className="form-field" style={{ justifyContent: "flex-end", gap: 8 }}>
+              <button type="button" className="btn btn--ghost" onClick={() => setEditingDetails(false)} disabled={busy}>
+                Cancel
+              </button>
+              <button className="btn btn--primary" type="submit" disabled={busy}>
+                Save
+              </button>
+            </div>
+          </form>
+        ) : (
+          <table className="data-table">
+            <tbody>
+              <tr>
+                <td>Branch</td>
+                <td>{branchName(incident.branch_id)}</td>
+              </tr>
+              <tr>
+                <td>Asset</td>
+                <td>
+                  {incident.asset_id ? (
+                    <Link href={`/assets/${incident.asset_id}`}>{assetLabel(incident.asset_id)}</Link>
+                  ) : (
+                    "Not linked"
+                  )}
+                </td>
+              </tr>
+              <tr>
+                <td>Date reported</td>
+                <td>{incident.created_at.slice(0, 10)}</td>
+              </tr>
+              <tr>
+                <td>Clinical impact</td>
+                <td>{incident.clinical_impact ?? "-"}</td>
+              </tr>
+              <tr>
+                <td>Patient-care impact</td>
+                <td>{incident.patient_care_impact ?? "-"}</td>
+              </tr>
+              <tr>
+                <td>Device status at report</td>
+                <td>{incident.device_status_at_report ?? "-"}</td>
+              </tr>
+              <tr>
+                <td>Assigned engineer</td>
+                <td>{userName(incident.assigned_engineer_id)}</td>
+              </tr>
+              <tr>
+                <td>Assigned vendor</td>
+                <td>{vendorName(incident.assigned_vendor_id)}</td>
+              </tr>
+              <tr>
+                <td>Root cause</td>
+                <td>{incident.root_cause ?? "Not recorded"}</td>
+              </tr>
+              <tr>
+                <td>Resolution</td>
+                <td>{incident.resolution ?? "Not recorded"}</td>
+              </tr>
+              <tr>
+                <td>Downtime (hours)</td>
+                <td>{incident.downtime_hours ?? "Not recorded"}</td>
+              </tr>
+              <tr>
+                <td>CER No.</td>
+                <td>{incident.cer_number ?? "-"}</td>
+              </tr>
+              <tr>
+                <td>Indent No.</td>
+                <td>{incident.indent_number ?? "-"}</td>
+              </tr>
+              <tr>
+                <td>PO No.</td>
+                <td>{incident.po_number ?? "-"}</td>
+              </tr>
+              <tr>
+                <td>PO closure date</td>
+                <td>{incident.po_closure_date ?? "-"}</td>
+              </tr>
+              <tr>
+                <td>PO cost (excl. GST)</td>
+                <td>{incident.po_cost_excl_gst != null ? `₹${incident.po_cost_excl_gst.toLocaleString("en-IN")}` : "-"}</td>
+              </tr>
+              <tr>
+                <td>PO GST %</td>
+                <td>{incident.po_gst_percent ?? "-"}</td>
+              </tr>
+              <tr>
+                <td>PO amount (incl. GST)</td>
+                <td>{incident.po_amount != null ? `₹${incident.po_amount.toLocaleString("en-IN")}` : "-"}</td>
+              </tr>
+              <tr>
+                <td>Vendor estimate (excl. GST)</td>
+                <td>
+                  {incident.vendor_estimate_cost_excl_gst != null
+                    ? `₹${incident.vendor_estimate_cost_excl_gst.toLocaleString("en-IN")}`
+                    : "-"}
+                </td>
+              </tr>
+              <tr>
+                <td>Vendor estimate (incl. GST)</td>
+                <td>
+                  {incident.vendor_estimate_cost_incl_gst != null
+                    ? `₹${incident.vendor_estimate_cost_incl_gst.toLocaleString("en-IN")}`
+                    : "-"}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Business-workflow audit — read-only, derived live from the existing
@@ -487,7 +588,11 @@ export default function IncidentDetailPage() {
             </div>
             <div className="form-field">
               <label>Vendor</label>
-              <select name="assigned_vendor_id" defaultValue={incident.assigned_vendor_id ?? ""}>
+              <select
+                key={incident.assigned_vendor_id ?? deviceVendorId ?? "none"}
+                name="assigned_vendor_id"
+                defaultValue={incident.assigned_vendor_id ?? deviceVendorId ?? ""}
+              >
                 <option value="">None</option>
                 {vendors.map((v) => (
                   <option key={v.id} value={v.id}>
@@ -495,6 +600,9 @@ export default function IncidentDetailPage() {
                   </option>
                 ))}
               </select>
+              {!incident.assigned_vendor_id && deviceVendorId && (
+                <p className="field-hint">Pre-selected from this device&apos;s own vendor — change it if needed.</p>
+              )}
             </div>
             <div className="form-field" style={{ justifyContent: "flex-end" }}>
               <button className="btn btn--primary" type="submit" disabled={busy}>

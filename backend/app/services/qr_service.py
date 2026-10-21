@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from ..models.device import Asset
 from ..models.hospital import Branch, Department, Location
 from ..models.qr import DEFAULT_QR_SETTINGS_ID, QrDisplaySettings
+from ..models.vendor import DeviceModelVendor, Vendor
 from ..services import asset_lifecycle_service
 
 # 128 bits of entropy, URL-safe — not guessable, not sequential, carries no device
@@ -108,6 +109,7 @@ class _QrContext:
     department: Department | None
     location: Location | None
     lifecycle: object  # AssetLifecycleSummaryOut
+    vendor_name: str | None
 
 
 def _device_name(ctx: _QrContext) -> str | None:
@@ -132,6 +134,12 @@ def _branch_name(ctx: _QrContext) -> str | None:
 
 def _department_name(ctx: _QrContext) -> str | None:
     return ctx.department.name if ctx.department else None
+
+
+def _vendor_name(ctx: _QrContext) -> str | None:
+    """Vendor NAME only — never phone/email, per the "no vendor contact details"
+    rule this whole public page is built around (see routers/qr_public.py)."""
+    return ctx.vendor_name
 
 
 def _location_name(ctx: _QrContext) -> str | None:
@@ -227,6 +235,7 @@ QR_FIELD_REGISTRY: list[QrFieldDef] = [
     QrFieldDef("serial_number", "Serial Number", "identity", False, _serial_number),
     QrFieldDef("branch_name", "Branch / Hospital", "location", True, _branch_name),
     QrFieldDef("department_name", "Department", "location", True, _department_name),
+    QrFieldDef("vendor_name", "Vendor", "coverage", True, _vendor_name),
     QrFieldDef("location_name", "Building / Floor / Location", "location", False, _location_name),
     QrFieldDef("status", "Current Status", "lifecycle", True, _status),
     QrFieldDef("in_service_since", "In Service Since", "lifecycle", True, _in_service_since),
@@ -257,12 +266,26 @@ def get_or_default_settings(db: Session) -> QrDisplaySettings:
     return settings
 
 
+def primary_vendor_name(db: Session, device_model_id: str) -> str | None:
+    row = (
+        db.query(Vendor.name)
+        .join(DeviceModelVendor, DeviceModelVendor.vendor_id == Vendor.id)
+        .filter(DeviceModelVendor.device_model_id == device_model_id)
+        .order_by(DeviceModelVendor.rank.asc())
+        .first()
+    )
+    return row[0] if row else None
+
+
 def _build_context(db: Session, asset: Asset) -> _QrContext:
     branch = db.get(Branch, asset.branch_id) if asset.branch_id else None
     department = db.get(Department, asset.department_id) if asset.department_id else None
     location = db.get(Location, asset.location_id) if asset.location_id else None
     lifecycle = asset_lifecycle_service.get_asset_lifecycle_summary(db, asset)
-    return _QrContext(asset=asset, branch=branch, department=department, location=location, lifecycle=lifecycle)
+    vendor_name = primary_vendor_name(db, asset.device_model_id) if asset.device_model_id else None
+    return _QrContext(
+        asset=asset, branch=branch, department=department, location=location, lifecycle=lifecycle, vendor_name=vendor_name
+    )
 
 
 def build_public_fields(db: Session, asset: Asset, settings: QrDisplaySettings) -> list[dict]:
@@ -271,8 +294,17 @@ def build_public_fields(db: Session, asset: Asset, settings: QrDisplaySettings) 
     allowlisted (QR_FIELD_BY_KEY) and enabled. Never returns anything else from the
     Asset row."""
     ctx = _build_context(db, asset)
+    # Same backfill as routers/qr.py's _settings_to_out: a field added to
+    # QR_FIELD_REGISTRY after a settings row was last saved must still show (at its
+    # registry default) on the public page, not only once an admin re-saves Settings.
+    configured_keys = {entry.get("key") for entry in (settings.field_config or [])}
+    entries = list(settings.field_config or [])
+    for field_def in QR_FIELD_REGISTRY:
+        if field_def.key not in configured_keys:
+            entries.append({"key": field_def.key, "enabled": field_def.default_visible})
+
     fields: list[dict] = []
-    for entry in settings.field_config or []:
+    for entry in entries:
         key = entry.get("key")
         field_def = QR_FIELD_BY_KEY.get(key)
         if field_def is None or not entry.get("enabled"):

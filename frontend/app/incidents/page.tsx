@@ -142,7 +142,11 @@ export default function IncidentsPage() {
       </div>
 
       <div className="toolbar">
-        <SearchBar value={search} onChange={setSearch} placeholder="Search description or category..." />
+        <SearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder="Search device, branch, vendor, description, remark, CER/Indent/PO no..."
+        />
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
           {INCIDENT_STATUSES.map((s) => (
