@@ -224,6 +224,6 @@ def test_empty_branch_returns_zeroed_vocabulary_not_missing_keys(admin_client):
 
     assert body["incidents"]["total"] == 0
     assert body["incidents"]["open"] == 0
-    assert body["incidents"]["by_status"]["NEW"] == 0
+    assert body["incidents"]["by_status"]["OPEN"] == 0
     assert body["requirements"]["by_status"]["DRAFT"] == 0
     assert body["fulfillments"]["by_status"]["PENDING_ALLOCATION"] == 0

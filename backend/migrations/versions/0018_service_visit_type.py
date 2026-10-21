@@ -35,22 +35,27 @@ SEEDED_VISIT_TYPES = ["PM", "CALIBRATION", "BREAKDOWN", "INSTALLATION", "OTHER"]
 
 
 def upgrade() -> None:
-    op.create_table(
-        "service_visit_types",
-        sa.Column("id", sa.String(), primary_key=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.Column("created_by", sa.String(), nullable=True),
-        sa.Column("updated_by", sa.String(), nullable=True),
-        sa.Column("version", sa.Integer(), nullable=False),
-        sa.Column("name", sa.String(), nullable=False, unique=True),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
-    )
-
     bind = op.get_bind()
+    # Hosting-deploy pass — see 0005's note. The table may already exist (empty)
+    # from an earlier unfiltered create_all; seeding below still needs to run
+    # either way since create_all never inserts data.
+    if not sa.inspect(bind).has_table("service_visit_types"):
+        op.create_table(
+            "service_visit_types",
+            sa.Column("id", sa.String(), primary_key=True),
+            sa.Column("created_at", sa.DateTime(), nullable=False),
+            sa.Column("updated_at", sa.DateTime(), nullable=False),
+            sa.Column("created_by", sa.String(), nullable=True),
+            sa.Column("updated_by", sa.String(), nullable=True),
+            sa.Column("version", sa.Integer(), nullable=False),
+            sa.Column("name", sa.String(), nullable=False, unique=True),
+            sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+        )
     session = orm.Session(bind=bind)
     try:
-        _seed_visit_types(session)
+        existing_count = session.execute(sa.text("SELECT COUNT(*) FROM service_visit_types")).scalar()
+        if not existing_count:
+            _seed_visit_types(session)
         session.commit()
     except Exception:
         session.rollback()

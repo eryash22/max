@@ -133,7 +133,7 @@ def test_device_issue_incident_full_chain_to_resolution(admin_client, client, db
         f"/api/v1/incidents/{incident['id']}/assign", json={"assigned_engineer_id": engineer.id}, headers=eng_headers
     )
     assert assigned.status_code == 200
-    assert assigned.json()["status"] == "ASSIGNED"
+    assert assigned.json()["status"] == "WORK_IN_PROGRESS"
 
     from app.models.notifications import Notification
 
@@ -141,21 +141,16 @@ def test_device_issue_incident_full_chain_to_resolution(admin_client, client, db
     assert len(assigned_notifications) == 1
     assert assigned_notifications[0].recipient == engineer.email
 
-    diagnosed = client.post(
-        f"/api/v1/incidents/{incident['id']}/status", json={"to_status": "UNDER_DIAGNOSIS"}, headers=eng_headers
+    condemned = client.post(
+        f"/api/v1/incidents/{incident['id']}/status", json={"to_status": "TO_BE_CONDEMNED"}, headers=eng_headers
     )
-    assert diagnosed.status_code == 200
+    assert condemned.status_code == 200
 
-    resolved = client.post(
-        f"/api/v1/incidents/{incident['id']}/status", json={"to_status": "RESOLVED"}, headers=eng_headers
-    )
-    assert resolved.status_code == 200
-
-    # An illegal jump (skipping straight back to NEW) must now be rejected.
-    illegal = client.post(f"/api/v1/incidents/{incident['id']}/status", json={"to_status": "NEW"}, headers=eng_headers)
+    # An illegal jump (skipping straight back to OPEN) must now be rejected.
+    illegal = client.post(f"/api/v1/incidents/{incident['id']}/status", json={"to_status": "OPEN"}, headers=eng_headers)
     assert illegal.status_code == 409
 
-    closed = client.post(f"/api/v1/incidents/{incident['id']}/status", json={"to_status": "CLOSED"}, headers=eng_headers)
+    closed = client.post(f"/api/v1/incidents/{incident['id']}/status", json={"to_status": "OPERATIONAL"}, headers=eng_headers)
     assert closed.status_code == 200
     assert closed.json()["closed_by"] == engineer.id
 

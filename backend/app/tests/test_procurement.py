@@ -408,10 +408,10 @@ def test_technical_closure_independent_of_invoice(admin_client, client, db_sessi
     # No invoice recorded at all yet — BME should still be able to close the incident.
     r2 = admin_client.post(
         f"/api/v1/incidents/{incident['id']}/status",
-        json={"to_status": "CLOSED", "notes": "QA TEST technical closure, invoice pending"},
+        json={"to_status": "OPERATIONAL", "notes": "QA TEST technical closure, invoice pending"},
     )
     assert r2.status_code == 200, r2.text
-    assert r2.json()["status"] == "CLOSED"
+    assert r2.json()["status"] == "OPERATIONAL"
 
     # Incident's own procurement summary confirms financial closure is still open.
     detail = admin_client.get(f"/api/v1/incidents/{incident['id']}").json()

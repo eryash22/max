@@ -25,6 +25,9 @@ depends_on = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    if sa.inspect(bind).has_table("theme_config"):
+        return  # Hosting-deploy pass — see 0005's note
     op.create_table(
         "theme_config",
         sa.Column("id", sa.String(), primary_key=True),

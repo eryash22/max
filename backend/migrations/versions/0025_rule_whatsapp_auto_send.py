@@ -25,10 +25,19 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "notification_templates",
-        sa.Column("whatsapp_auto_send", sa.Boolean(), nullable=False, server_default=sa.false()),
-    )
+    # Hosting-deploy pass — on a database migrated straight from byte-empty to head,
+    # an earlier unfiltered create_all (see 0005's note) already creates this column
+    # under its FINAL name "auto_send" (0026 renames whatsapp_auto_send -> auto_send,
+    # and today's models only know the final name) — so adding "whatsapp_auto_send"
+    # here would create a stray second column 0026's rename would then collide with.
+    # Skip entirely if either name is already present.
+    bind = op.get_bind()
+    cols = {c["name"] for c in sa.inspect(bind).get_columns("notification_templates")}
+    if "whatsapp_auto_send" not in cols and "auto_send" not in cols:
+        op.add_column(
+            "notification_templates",
+            sa.Column("whatsapp_auto_send", sa.Boolean(), nullable=False, server_default=sa.false()),
+        )
 
 
 def downgrade() -> None:

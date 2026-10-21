@@ -73,11 +73,14 @@ MAX_HEALTHCARE_NETWORK_NAME = "MAX Healthcare"
 def upgrade() -> None:
     bind = op.get_bind()
 
+    # Hosting-deploy pass — same reasoning as 0005/0006/0007: a database migrated
+    # straight from byte-empty to head already has these columns from an earlier
+    # create_all using today's models, so check first.
+    branch_cols = {c["name"] for c in sa.inspect(bind).get_columns("branches")}
     with op.batch_alter_table("branches") as batch_op:
-        batch_op.add_column(sa.Column("tl", sa.String(), nullable=True))
-        batch_op.add_column(sa.Column("branch_email", sa.String(), nullable=True))
-        batch_op.add_column(sa.Column("branch_phone", sa.String(), nullable=True))
-        batch_op.add_column(sa.Column("branch_whatsapp", sa.String(), nullable=True))
+        for col_name in ("tl", "branch_email", "branch_phone", "branch_whatsapp"):
+            if col_name not in branch_cols:
+                batch_op.add_column(sa.Column(col_name, sa.String(), nullable=True))
 
     session = orm.Session(bind=bind)
     try:

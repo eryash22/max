@@ -3,8 +3,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import BaseModel
 
-# status values: NEW, ACKNOWLEDGED, ASSIGNED, UNDER_DIAGNOSIS, WAITING_FOR_VENDOR,
-# WAITING_FOR_PART, WAITING_FOR_USER, RESOLVED, PENDING_VERIFICATION, CLOSED, ESCALATED,
+# status values: OPEN, WORK_IN_PROGRESS, TO_BE_CONDEMNED, OPERATIONAL,
 # CANCELLED (safe "archive" terminal state — see incident_service.ALLOWED_TRANSITIONS).
 # severity values: LOW, MEDIUM, HIGH, CRITICAL.
 
@@ -23,7 +22,7 @@ class Incident(BaseModel):
     clinical_impact: Mapped[str | None] = mapped_column(String, nullable=True)
     patient_care_impact: Mapped[str | None] = mapped_column(String, nullable=True)
     device_status_at_report: Mapped[str | None] = mapped_column(String, nullable=True)
-    status: Mapped[str] = mapped_column(String, default="NEW")
+    status: Mapped[str] = mapped_column(String, default="OPEN")
     assigned_engineer_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     assigned_vendor_id: Mapped[str | None] = mapped_column(ForeignKey("vendors.id"), nullable=True)
     resolution: Mapped[str | None] = mapped_column(String, nullable=True)

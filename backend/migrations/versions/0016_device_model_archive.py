@@ -22,10 +22,12 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "device_models",
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
-    )
+    bind = op.get_bind()
+    if "is_active" not in {c["name"] for c in sa.inspect(bind).get_columns("device_models")}:
+        op.add_column(
+            "device_models",
+            sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+        )
 
 
 def downgrade() -> None:

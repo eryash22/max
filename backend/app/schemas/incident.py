@@ -3,26 +3,22 @@ from pydantic import BaseModel
 from .asset_lifecycle import ContractCoverageOut
 from .procurement import IncidentProcurementSummaryOut
 
-VALID_STATUSES = [
-    "NEW", "ACKNOWLEDGED", "ASSIGNED", "UNDER_DIAGNOSIS", "WAITING_FOR_VENDOR",
-    "WAITING_FOR_PART", "WAITING_FOR_USER", "RESOLVED", "PENDING_VERIFICATION",
-    "CLOSED", "ESCALATED", "CANCELLED",
-]
+VALID_STATUSES = ["OPEN", "WORK_IN_PROGRESS", "TO_BE_CONDEMNED", "OPERATIONAL", "CANCELLED"]
 
 # The canonical "is this incident still open?" definition. Before this existed the
 # Dashboard derived open counts client-side as `total - RESOLVED - CLOSED`, which
 # silently counted every CANCELLED incident as open — CANCELLED is a terminal
-# "archive" state (incident_service.ALLOWED_TRANSITIONS maps both CLOSED and
+# "archive" state (incident_service.ALLOWED_TRANSITIONS maps both OPERATIONAL and
 # CANCELLED to an empty transition set). Defined here next to VALID_STATUSES so the
 # vocabulary and its open/closed partition can never drift apart, and so routers,
 # services and the dashboard summary all share one definition rather than each
 # re-deriving it by subtraction.
 #
-# RESOLVED is excluded from "open" even though the transition graph still allows
-# RESOLVED -> PENDING_VERIFICATION/CLOSED: the work itself is done, so it is not an
-# open problem needing attention. PENDING_VERIFICATION deliberately IS open — someone
-# still has to verify it — which also preserves the pre-existing behaviour.
-NON_OPEN_STATUSES = frozenset({"RESOLVED", "CLOSED", "CANCELLED"})
+# Simplified to a 4-state vocabulary (plus CANCELLED as the existing archive action)
+# per explicit product direction: OPEN, WORK_IN_PROGRESS, TO_BE_CONDEMNED are all
+# still-open problems needing attention; OPERATIONAL (the device is back in service)
+# and CANCELLED are the only terminal/non-open states.
+NON_OPEN_STATUSES = frozenset({"OPERATIONAL", "CANCELLED"})
 OPEN_STATUSES = tuple(s for s in VALID_STATUSES if s not in NON_OPEN_STATUSES)
 
 

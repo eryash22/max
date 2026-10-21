@@ -36,17 +36,10 @@ ENGINEER_ASSIGNABLE_ROLES = {"BIOMEDICAL_ENGINEER", "BIOMEDICAL_ADMIN", "SUPER_A
 # effectively done — closing is the correct next step, not cancelling) or CLOSED
 # (terminal).
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
-    "NEW": {"ACKNOWLEDGED", "ASSIGNED", "ESCALATED", "CLOSED", "CANCELLED"},
-    "ACKNOWLEDGED": {"ASSIGNED", "ESCALATED", "CLOSED", "CANCELLED"},
-    "ASSIGNED": {"UNDER_DIAGNOSIS", "WAITING_FOR_VENDOR", "WAITING_FOR_PART", "WAITING_FOR_USER", "ESCALATED", "CLOSED", "CANCELLED"},
-    "UNDER_DIAGNOSIS": {"WAITING_FOR_VENDOR", "WAITING_FOR_PART", "WAITING_FOR_USER", "RESOLVED", "ESCALATED", "CLOSED", "CANCELLED"},
-    "WAITING_FOR_VENDOR": {"UNDER_DIAGNOSIS", "RESOLVED", "ESCALATED", "CLOSED", "CANCELLED"},
-    "WAITING_FOR_PART": {"UNDER_DIAGNOSIS", "RESOLVED", "ESCALATED", "CLOSED", "CANCELLED"},
-    "WAITING_FOR_USER": {"UNDER_DIAGNOSIS", "RESOLVED", "ESCALATED", "CLOSED", "CANCELLED"},
-    "RESOLVED": {"PENDING_VERIFICATION", "CLOSED"},
-    "PENDING_VERIFICATION": {"CLOSED", "UNDER_DIAGNOSIS"},
-    "ESCALATED": {"ASSIGNED", "UNDER_DIAGNOSIS", "CLOSED", "CANCELLED"},
-    "CLOSED": set(),
+    "OPEN": {"WORK_IN_PROGRESS", "TO_BE_CONDEMNED", "OPERATIONAL", "CANCELLED"},
+    "WORK_IN_PROGRESS": {"TO_BE_CONDEMNED", "OPERATIONAL", "CANCELLED"},
+    "TO_BE_CONDEMNED": {"OPERATIONAL", "CANCELLED"},
+    "OPERATIONAL": set(),
     "CANCELLED": set(),
 }
 
@@ -57,11 +50,11 @@ class IncidentServiceError(Exception):
 
 
 def create_incident(db: Session, payload: IncidentIn, *, reported_by: str) -> Incident:
-    incident = Incident(reported_by=reported_by, status="NEW", **payload.model_dump())
+    incident = Incident(reported_by=reported_by, status="OPEN", **payload.model_dump())
     db.add(incident)
     db.flush()
 
-    db.add(IncidentStatusHistory(incident_id=incident.id, from_status=None, to_status="NEW", changed_by=reported_by))
+    db.add(IncidentStatusHistory(incident_id=incident.id, from_status=None, to_status="OPEN", changed_by=reported_by))
     audit_record(db, user_id=reported_by, action="CREATE", entity="incident", entity_id=incident.id,
                  new_value=payload.model_dump())
     db.commit()
@@ -104,10 +97,10 @@ def assign_incident(db: Session, incident: Incident, payload: IncidentAssignIn, 
         incident.assigned_vendor_id = payload.assigned_vendor_id
 
     from_status = incident.status
-    if incident.status in ("NEW", "ACKNOWLEDGED"):
-        incident.status = "ASSIGNED"
+    if incident.status == "OPEN":
+        incident.status = "WORK_IN_PROGRESS"
         db.add(IncidentStatusHistory(
-            incident_id=incident.id, from_status=from_status, to_status="ASSIGNED",
+            incident_id=incident.id, from_status=from_status, to_status="WORK_IN_PROGRESS",
             changed_by=user_id, notes=payload.notes,
         ))
 
@@ -128,7 +121,7 @@ def change_status(db: Session, incident: Incident, payload: IncidentStatusChange
             f"Cannot move incident from {from_status} to {payload.to_status}"
         )
     incident.status = payload.to_status
-    if payload.to_status == "CLOSED":
+    if payload.to_status == "OPERATIONAL":
         incident.closed_by = user_id
         incident.closed_at = datetime.now(timezone.utc).isoformat()
 
@@ -140,6 +133,6 @@ def change_status(db: Session, incident: Incident, payload: IncidentStatusChange
                  old_value={"status": from_status}, new_value={"status": payload.to_status, "notes": payload.notes})
     db.commit()
     db.refresh(incident)
-    if payload.to_status in ("RESOLVED", "CLOSED"):
+    if payload.to_status == "OPERATIONAL":
         dispatch_incident_event_safe(db, EVENT_INCIDENT_RESOLVED, incident=incident, user_id=user_id)
     return incident

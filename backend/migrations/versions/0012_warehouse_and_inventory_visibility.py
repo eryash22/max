@@ -50,10 +50,13 @@ HOSPITAL_UNIT_MANAGER = "HOSPITAL_UNIT_MANAGER"
 def upgrade() -> None:
     bind = op.get_bind()
 
-    op.add_column(
-        "branches",
-        sa.Column("is_central_warehouse", sa.Boolean(), nullable=False, server_default=sa.false()),
-    )
+    # Hosting-deploy pass — checked first in case an earlier create_all already
+    # created this column from today's models (see 0005's note).
+    if "is_central_warehouse" not in {c["name"] for c in sa.inspect(bind).get_columns("branches")}:
+        op.add_column(
+            "branches",
+            sa.Column("is_central_warehouse", sa.Boolean(), nullable=False, server_default=sa.false()),
+        )
 
     session = orm.Session(bind=bind)
     try:

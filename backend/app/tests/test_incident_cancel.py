@@ -38,7 +38,7 @@ def test_new_incident_can_be_cancelled(admin_client, client, db_session):
     assert fetched.json()["status"] == "CANCELLED"
 
     history = client.get(f"/api/v1/incidents/{created['id']}/history", headers=eng_headers).json()
-    assert [h["to_status"] for h in history] == ["NEW", "CANCELLED"]
+    assert [h["to_status"] for h in history] == ["OPEN", "CANCELLED"]
 
 
 def test_cancelled_incident_is_terminal(admin_client, client, db_session):
@@ -54,14 +54,14 @@ def test_cancelled_incident_is_terminal(admin_client, client, db_session):
     client.post(f"/api/v1/incidents/{created['id']}/status", json={"to_status": "CANCELLED"}, headers=eng_headers)
 
     reopen = client.post(
-        f"/api/v1/incidents/{created['id']}/status", json={"to_status": "ACKNOWLEDGED"}, headers=eng_headers
+        f"/api/v1/incidents/{created['id']}/status", json={"to_status": "WORK_IN_PROGRESS"}, headers=eng_headers
     )
     assert reopen.status_code == 409
 
 
 def test_resolved_incident_cannot_be_cancelled(admin_client, client, db_session):
     """CANCELLED is only reachable from a still-open status — an incident already
-    RESOLVED should be closed, not cancelled."""
+    OPERATIONAL should stay closed, not cancelled."""
     branch = _make_branch(admin_client)
     create_user(db_session, "doc-cancel3@example.com", "DOCTOR", "Password123!")
     create_user(db_session, "eng-cancel3@example.com", "BIOMEDICAL_ENGINEER", "Password123!")
@@ -71,9 +71,8 @@ def test_resolved_incident_cannot_be_cancelled(admin_client, client, db_session)
     created = client.post(
         "/api/v1/incidents", json={"branch_id": branch["id"], "description": "Pump issue"}, headers=doc_headers
     ).json()
-    client.post(f"/api/v1/incidents/{created['id']}/status", json={"to_status": "ASSIGNED"}, headers=eng_headers)
-    client.post(f"/api/v1/incidents/{created['id']}/status", json={"to_status": "UNDER_DIAGNOSIS"}, headers=eng_headers)
-    client.post(f"/api/v1/incidents/{created['id']}/status", json={"to_status": "RESOLVED"}, headers=eng_headers)
+    client.post(f"/api/v1/incidents/{created['id']}/status", json={"to_status": "WORK_IN_PROGRESS"}, headers=eng_headers)
+    client.post(f"/api/v1/incidents/{created['id']}/status", json={"to_status": "OPERATIONAL"}, headers=eng_headers)
 
     response = client.post(
         f"/api/v1/incidents/{created['id']}/status", json={"to_status": "CANCELLED"}, headers=eng_headers

@@ -27,10 +27,12 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "requirement_items",
-        sa.Column("asset_id", sa.String(), sa.ForeignKey("assets.id"), nullable=True),
-    )
+    bind = op.get_bind()
+    if "asset_id" not in {c["name"] for c in sa.inspect(bind).get_columns("requirement_items")}:
+        op.add_column(
+            "requirement_items",
+            sa.Column("asset_id", sa.String(), sa.ForeignKey("assets.id"), nullable=True),
+        )
 
 
 def downgrade() -> None:

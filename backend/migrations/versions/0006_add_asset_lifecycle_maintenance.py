@@ -23,12 +23,23 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Hosting-deploy pass — same reasoning as 0005: on a database migrated straight
+    # from byte-empty to head, 0002's Base.metadata.create_all(checkfirst=True)
+    # already creates `assets`/`service_visits` with these columns (today's model
+    # definitions), so add_column would fail with a duplicate-column error. Checking
+    # first keeps this correct for an incrementally-migrated database too.
+    bind = op.get_bind()
+    asset_cols = {c["name"] for c in sa.inspect(bind).get_columns("assets")}
     with op.batch_alter_table("assets") as batch_op:
-        batch_op.add_column(sa.Column("operational_since", sa.String(), nullable=True))
+        if "operational_since" not in asset_cols:
+            batch_op.add_column(sa.Column("operational_since", sa.String(), nullable=True))
 
+    visit_cols = {c["name"] for c in sa.inspect(bind).get_columns("service_visits")}
     with op.batch_alter_table("service_visits") as batch_op:
-        batch_op.add_column(sa.Column("issue", sa.String(), nullable=True))
-        batch_op.add_column(sa.Column("downtime_hours", sa.Float(), nullable=True))
+        if "issue" not in visit_cols:
+            batch_op.add_column(sa.Column("issue", sa.String(), nullable=True))
+        if "downtime_hours" not in visit_cols:
+            batch_op.add_column(sa.Column("downtime_hours", sa.Float(), nullable=True))
 
 
 def downgrade() -> None:

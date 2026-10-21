@@ -30,8 +30,8 @@ export default function IncidentDetailPage() {
   // No DELETE endpoint exists for incidents by design — they can be referenced by
   // asset history, repair, procurement, and audit. CANCELLED is the safe "archive"
   // equivalent: it preserves the incident and its full status/audit history. Not
-  // offered once the incident is already resolved/closed/cancelled.
-  const canCancel = canManage && !["RESOLVED", "PENDING_VERIFICATION", "CLOSED", "CANCELLED"].includes(incident?.status ?? "");
+  // offered once the incident is already operational/cancelled.
+  const canCancel = canManage && !["OPERATIONAL", "CANCELLED"].includes(incident?.status ?? "");
 
   // Workflow consolidation pass — Phase 9: an Incident raised as "Maintenance Request" /
   // "Calibration Request" / "Service Visit Request" (see /raise's INCIDENT_TYPES) is a

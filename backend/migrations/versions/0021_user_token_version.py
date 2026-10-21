@@ -23,10 +23,12 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "users",
-        sa.Column("token_version", sa.Integer(), nullable=False, server_default="0"),
-    )
+    bind = op.get_bind()
+    if "token_version" not in {c["name"] for c in sa.inspect(bind).get_columns("users")}:
+        op.add_column(
+            "users",
+            sa.Column("token_version", sa.Integer(), nullable=False, server_default="0"),
+        )
 
 
 def downgrade() -> None:

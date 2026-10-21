@@ -25,17 +25,15 @@ def test_open_and_non_open_partition_every_valid_status():
 
 
 def test_terminal_statuses_are_not_open():
-    for status in ("RESOLVED", "CLOSED", "CANCELLED"):
+    for status in ("OPERATIONAL", "CANCELLED"):
         assert status in NON_OPEN_STATUSES, f"{status} must not count as open"
         assert status not in OPEN_STATUSES
 
 
 def test_active_statuses_are_open():
-    """NEW/ASSIGNED/etc. are open, and PENDING_VERIFICATION deliberately stays open —
-    someone still has to verify it."""
-    for status in ("NEW", "ACKNOWLEDGED", "ASSIGNED", "UNDER_DIAGNOSIS", "ESCALATED",
-                    "WAITING_FOR_VENDOR", "WAITING_FOR_PART", "WAITING_FOR_USER",
-                    "PENDING_VERIFICATION"):
+    """OPEN/WORK_IN_PROGRESS/TO_BE_CONDEMNED are all still-open problems needing
+    attention."""
+    for status in ("OPEN", "WORK_IN_PROGRESS", "TO_BE_CONDEMNED"):
         assert status in OPEN_STATUSES, f"{status} must count as open"
 
 
@@ -79,13 +77,12 @@ def test_dashboard_open_count_excludes_every_terminal_status(admin_client):
 
     _incident(admin_client, branch["id"], "still open")
 
-    resolved = _incident(admin_client, branch["id"], "resolved incident")
-    _transition(admin_client, resolved["id"], "ASSIGNED")
-    _transition(admin_client, resolved["id"], "UNDER_DIAGNOSIS")
-    _transition(admin_client, resolved["id"], "RESOLVED")
+    condemned = _incident(admin_client, branch["id"], "to be condemned incident")
+    _transition(admin_client, condemned["id"], "WORK_IN_PROGRESS")
+    _transition(admin_client, condemned["id"], "TO_BE_CONDEMNED")
 
     closed = _incident(admin_client, branch["id"], "closed incident")
-    _transition(admin_client, closed["id"], "CLOSED")
+    _transition(admin_client, closed["id"], "OPERATIONAL")
 
     cancelled = _incident(admin_client, branch["id"], "cancelled incident")
     _transition(admin_client, cancelled["id"], "CANCELLED")
@@ -95,11 +92,13 @@ def test_dashboard_open_count_excludes_every_terminal_status(admin_client):
     incidents = response.json()["incidents"]
 
     assert incidents["total"] == 4
-    assert incidents["open"] == 1, f"only the untouched incident is open, got {incidents}"
+    # TO_BE_CONDEMNED is still an open problem needing attention — only OPERATIONAL
+    # and CANCELLED are non-open.
+    assert incidents["open"] == 2, f"the untouched + to-be-condemned incidents are open, got {incidents}"
     assert incidents["by_status"]["CANCELLED"] == 1
-    assert incidents["by_status"]["RESOLVED"] == 1
-    assert incidents["by_status"]["CLOSED"] == 1
-    assert incidents["by_status"]["NEW"] == 1
+    assert incidents["by_status"]["TO_BE_CONDEMNED"] == 1
+    assert incidents["by_status"]["OPERATIONAL"] == 1
+    assert incidents["by_status"]["OPEN"] == 1
 
 
 def test_dashboard_critical_open_excludes_cancelled(admin_client):

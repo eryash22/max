@@ -36,20 +36,29 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("assets", sa.Column("qr_token", sa.String(), nullable=True))
-    op.add_column("assets", sa.Column("qr_active", sa.Boolean(), nullable=False, server_default=sa.true()))
-    op.add_column("assets", sa.Column("qr_generated_at", sa.DateTime(), nullable=True))
-    op.create_index("ix_assets_qr_token", "assets", ["qr_token"], unique=True)
+    # Hosting-deploy pass — same reasoning as 0005's note.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    asset_cols = {c["name"] for c in inspector.get_columns("assets")}
+    if "qr_token" not in asset_cols:
+        op.add_column("assets", sa.Column("qr_token", sa.String(), nullable=True))
+    if "qr_active" not in asset_cols:
+        op.add_column("assets", sa.Column("qr_active", sa.Boolean(), nullable=False, server_default=sa.true()))
+    if "qr_generated_at" not in asset_cols:
+        op.add_column("assets", sa.Column("qr_generated_at", sa.DateTime(), nullable=True))
+    if "ix_assets_qr_token" not in {ix["name"] for ix in inspector.get_indexes("assets")}:
+        op.create_index("ix_assets_qr_token", "assets", ["qr_token"], unique=True)
 
-    op.create_table(
-        "qr_display_settings",
-        sa.Column("id", sa.String(), primary_key=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.true()),
-        sa.Column("field_config", sa.JSON(), nullable=True),
-        sa.Column("updated_by_user_id", sa.String(), sa.ForeignKey("users.id"), nullable=True),
-    )
+    if not inspector.has_table("qr_display_settings"):
+        op.create_table(
+            "qr_display_settings",
+            sa.Column("id", sa.String(), primary_key=True),
+            sa.Column("created_at", sa.DateTime(), nullable=False),
+            sa.Column("updated_at", sa.DateTime(), nullable=False),
+            sa.Column("enabled", sa.Boolean(), nullable=False, server_default=sa.true()),
+            sa.Column("field_config", sa.JSON(), nullable=True),
+            sa.Column("updated_by_user_id", sa.String(), sa.ForeignKey("users.id"), nullable=True),
+        )
 
 
 def downgrade() -> None:

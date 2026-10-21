@@ -24,7 +24,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("users", sa.Column("phone", sa.String(), nullable=True))
+    bind = op.get_bind()
+    if "phone" not in {c["name"] for c in sa.inspect(bind).get_columns("users")}:
+        op.add_column("users", sa.Column("phone", sa.String(), nullable=True))
 
 
 def downgrade() -> None:

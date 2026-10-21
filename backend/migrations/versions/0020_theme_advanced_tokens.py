@@ -24,7 +24,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("theme_config", sa.Column("advanced_tokens", sa.JSON(), nullable=True))
+    bind = op.get_bind()
+    if "advanced_tokens" not in {c["name"] for c in sa.inspect(bind).get_columns("theme_config")}:
+        op.add_column("theme_config", sa.Column("advanced_tokens", sa.JSON(), nullable=True))
 
 
 def downgrade() -> None:

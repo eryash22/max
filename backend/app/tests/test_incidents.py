@@ -18,7 +18,7 @@ def test_doctor_can_create_incident(admin_client, client, db_session):
     )
     assert response.status_code == 201
     body = response.json()
-    assert body["status"] == "NEW"
+    assert body["status"] == "OPEN"
     assert body["severity"] == "CRITICAL"
 
 
@@ -97,26 +97,26 @@ def test_status_transition_creates_history_and_closes_incident(admin_client, cli
         "/api/v1/incidents", json={"branch_id": branch["id"], "description": "Broken pump"}, headers=doc_headers
     ).json()
 
-    ack = client.post(
-        f"/api/v1/incidents/{created['id']}/status", json={"to_status": "ACKNOWLEDGED"}, headers=eng_headers
+    wip = client.post(
+        f"/api/v1/incidents/{created['id']}/status", json={"to_status": "WORK_IN_PROGRESS"}, headers=eng_headers
     )
-    assert ack.status_code == 200
-    assert ack.json()["status"] == "ACKNOWLEDGED"
+    assert wip.status_code == 200
+    assert wip.json()["status"] == "WORK_IN_PROGRESS"
 
     closed = client.post(
         f"/api/v1/incidents/{created['id']}/status",
-        json={"to_status": "CLOSED", "notes": "Fixed and verified"},
+        json={"to_status": "OPERATIONAL", "notes": "Fixed and verified"},
         headers=eng_headers,
     )
     assert closed.status_code == 200
-    assert closed.json()["status"] == "CLOSED"
+    assert closed.json()["status"] == "OPERATIONAL"
     assert closed.json()["closed_by"] is not None
     assert closed.json()["closed_at"] is not None
 
     history = client.get(f"/api/v1/incidents/{created['id']}/history", headers=eng_headers)
     assert history.status_code == 200
     to_statuses = [h["to_status"] for h in history.json()]
-    assert to_statuses == ["NEW", "ACKNOWLEDGED", "CLOSED"]
+    assert to_statuses == ["OPEN", "WORK_IN_PROGRESS", "OPERATIONAL"]
 
 
 def test_invalid_status_rejected(admin_client, client, db_session):
@@ -146,7 +146,7 @@ def test_doctor_cannot_manage_incident_status(admin_client, client, db_session):
     ).json()
 
     response = client.post(
-        f"/api/v1/incidents/{created['id']}/status", json={"to_status": "ACKNOWLEDGED"}, headers=doc_headers
+        f"/api/v1/incidents/{created['id']}/status", json={"to_status": "WORK_IN_PROGRESS"}, headers=doc_headers
     )
     assert response.status_code == 403
 
@@ -220,7 +220,7 @@ def test_assign_sets_engineer_and_advances_status(admin_client, client, db_sessi
     created = client.post(
         "/api/v1/incidents", json={"branch_id": branch["id"], "description": "Broken pump"}, headers=doc_headers
     ).json()
-    assert created["status"] == "NEW"
+    assert created["status"] == "OPEN"
 
     assigned = client.post(
         f"/api/v1/incidents/{created['id']}/assign",
@@ -230,10 +230,10 @@ def test_assign_sets_engineer_and_advances_status(admin_client, client, db_sessi
     assert assigned.status_code == 200
     body = assigned.json()
     assert body["assigned_engineer_id"] == engineer.id
-    assert body["status"] == "ASSIGNED"
+    assert body["status"] == "WORK_IN_PROGRESS"
 
     history = client.get(f"/api/v1/incidents/{created['id']}/history", headers=eng_headers).json()
-    assert [h["to_status"] for h in history] == ["NEW", "ASSIGNED"]
+    assert [h["to_status"] for h in history] == ["OPEN", "WORK_IN_PROGRESS"]
 
 
 def test_doctor_cannot_assign_incident(admin_client, client, db_session):
@@ -296,9 +296,9 @@ def test_hospital_unit_manager_can_create_incident(admin_client, client, db_sess
 
 
 def test_illegal_status_transition_rejected(admin_client, client, db_session):
-    """CLOSED is terminal; a previously-closed incident cannot be reopened by jumping
-    straight back to NEW, unlike before this pass (any status was reachable from any
-    other status)."""
+    """OPERATIONAL is terminal; a previously-closed incident cannot be reopened by
+    jumping straight back to OPEN, unlike before this pass (any status was reachable
+    from any other status)."""
     branch = _make_branch(admin_client)
     create_user(db_session, "doc@example.com", "DOCTOR", "Password123!")
     create_user(db_session, "eng@example.com", "BIOMEDICAL_ENGINEER", "Password123!")
@@ -310,13 +310,13 @@ def test_illegal_status_transition_rejected(admin_client, client, db_session):
     ).json()
 
     closed = client.post(
-        f"/api/v1/incidents/{created['id']}/status", json={"to_status": "CLOSED"}, headers=eng_headers
+        f"/api/v1/incidents/{created['id']}/status", json={"to_status": "OPERATIONAL"}, headers=eng_headers
     )
     assert closed.status_code == 200
-    assert closed.json()["status"] == "CLOSED"
+    assert closed.json()["status"] == "OPERATIONAL"
 
     reopen = client.post(
-        f"/api/v1/incidents/{created['id']}/status", json={"to_status": "NEW"}, headers=eng_headers
+        f"/api/v1/incidents/{created['id']}/status", json={"to_status": "OPEN"}, headers=eng_headers
     )
     assert reopen.status_code == 409
 
@@ -332,7 +332,7 @@ def test_legal_diagnosis_chain_accepted(admin_client, client, db_session):
         "/api/v1/incidents", json={"branch_id": branch["id"], "description": "Broken pump"}, headers=doc_headers
     ).json()
 
-    for to_status in ("ASSIGNED", "UNDER_DIAGNOSIS", "RESOLVED", "PENDING_VERIFICATION", "CLOSED"):
+    for to_status in ("WORK_IN_PROGRESS", "TO_BE_CONDEMNED", "OPERATIONAL"):
         response = client.post(
             f"/api/v1/incidents/{created['id']}/status", json={"to_status": to_status}, headers=eng_headers
         )
@@ -393,8 +393,8 @@ def test_resolve_fires_incident_resolved_notification(admin_client, client, db_s
     created = client.post(
         "/api/v1/incidents", json={"branch_id": branch["id"], "description": "Broken pump"}, headers=doc_headers
     ).json()
-    client.post(f"/api/v1/incidents/{created['id']}/status", json={"to_status": "ACKNOWLEDGED"}, headers=eng_headers)
-    client.post(f"/api/v1/incidents/{created['id']}/status", json={"to_status": "CLOSED"}, headers=eng_headers)
+    client.post(f"/api/v1/incidents/{created['id']}/status", json={"to_status": "WORK_IN_PROGRESS"}, headers=eng_headers)
+    client.post(f"/api/v1/incidents/{created['id']}/status", json={"to_status": "OPERATIONAL"}, headers=eng_headers)
 
     from app.models.notifications import Notification
 

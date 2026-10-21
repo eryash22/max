@@ -39,6 +39,13 @@ def _base_columns():
 
 
 def upgrade() -> None:
+    # Hosting-deploy pass — a database migrated straight from byte-empty to head may
+    # already have every table/column/index below from an earlier unfiltered
+    # create_all (see 0005's note). `_ct`/`_ix` skip anything that already exists
+    # rather than assuming either migration history.
+    bind = op.get_bind()
+    if sa.inspect(bind).has_table("quotations"):
+        return  # the whole module's tables/columns either all exist already or none do
     op.create_table(
         "quotations",
         *_base_columns(),

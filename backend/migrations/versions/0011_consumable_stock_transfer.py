@@ -43,10 +43,15 @@ def upgrade() -> None:
     bind = op.get_bind()
 
     inspector = sa.inspect(bind)
-    for uc in inspector.get_unique_constraints("consumables"):
+    existing_ucs = inspector.get_unique_constraints("consumables")
+    for uc in existing_ucs:
         if uc["column_names"] == ["item_code"]:
             op.drop_constraint(uc["name"], "consumables", type_="unique")
-    op.create_unique_constraint("uq_consumables_item_code_branch", "consumables", ["item_code", "branch_id"])
+    # Hosting-deploy pass — on a database migrated straight from byte-empty to head,
+    # an earlier create_all may have already created this constraint from today's
+    # models (see 0005's note).
+    if not any(uc["name"] == "uq_consumables_item_code_branch" for uc in existing_ucs):
+        op.create_unique_constraint("uq_consumables_item_code_branch", "consumables", ["item_code", "branch_id"])
 
     Base.metadata.create_all(bind=bind, checkfirst=True)
 

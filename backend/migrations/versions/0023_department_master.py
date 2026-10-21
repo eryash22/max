@@ -40,26 +40,37 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "department_masters",
-        sa.Column("id", sa.String(), primary_key=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.Column("created_by", sa.String(), nullable=True),
-        sa.Column("updated_by", sa.String(), nullable=True),
-        sa.Column("version", sa.Integer(), nullable=False),
-        sa.Column("code", sa.String(), nullable=True),
-        sa.Column("name", sa.String(), nullable=False),
-        sa.Column("status", sa.String(), nullable=False, server_default="ACTIVE"),
-        sa.UniqueConstraint("code", name="uq_department_masters_code"),
-        sa.UniqueConstraint("name", name="uq_department_masters_name"),
-    )
+    # Hosting-deploy pass — a database migrated straight from byte-empty to head may
+    # already have this table/column/index from an earlier unfiltered create_all
+    # (see 0005's note). The backfill itself is always safe to run either way: on a
+    # genuinely fresh database there are zero `departments` rows at this point in
+    # history regardless (no migration inserts department data), so it's a no-op.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
 
-    op.add_column(
-        "departments",
-        sa.Column("department_master_id", sa.String(), sa.ForeignKey("department_masters.id"), nullable=True),
-    )
-    op.create_index("ix_departments_department_master_id", "departments", ["department_master_id"])
+    if not inspector.has_table("department_masters"):
+        op.create_table(
+            "department_masters",
+            sa.Column("id", sa.String(), primary_key=True),
+            sa.Column("created_at", sa.DateTime(), nullable=False),
+            sa.Column("updated_at", sa.DateTime(), nullable=False),
+            sa.Column("created_by", sa.String(), nullable=True),
+            sa.Column("updated_by", sa.String(), nullable=True),
+            sa.Column("version", sa.Integer(), nullable=False),
+            sa.Column("code", sa.String(), nullable=True),
+            sa.Column("name", sa.String(), nullable=False),
+            sa.Column("status", sa.String(), nullable=False, server_default="ACTIVE"),
+            sa.UniqueConstraint("code", name="uq_department_masters_code"),
+            sa.UniqueConstraint("name", name="uq_department_masters_name"),
+        )
+
+    if "department_master_id" not in {c["name"] for c in inspector.get_columns("departments")}:
+        op.add_column(
+            "departments",
+            sa.Column("department_master_id", sa.String(), sa.ForeignKey("department_masters.id"), nullable=True),
+        )
+    if "ix_departments_department_master_id" not in {ix["name"] for ix in inspector.get_indexes("departments")}:
+        op.create_index("ix_departments_department_master_id", "departments", ["department_master_id"])
 
     _backfill_department_masters()
 

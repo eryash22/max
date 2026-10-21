@@ -23,10 +23,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("consumables", sa.Column("vendor_id", sa.String(), nullable=True))
-    op.create_foreign_key(
-        "fk_consumables_vendor_id_vendors", "consumables", "vendors", ["vendor_id"], ["id"]
-    )
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if "vendor_id" not in {c["name"] for c in inspector.get_columns("consumables")}:
+        op.add_column("consumables", sa.Column("vendor_id", sa.String(), nullable=True))
+    fk_names = {fk["name"] for fk in inspector.get_foreign_keys("consumables") if fk["name"]}
+    if "fk_consumables_vendor_id_vendors" not in fk_names:
+        op.create_foreign_key(
+            "fk_consumables_vendor_id_vendors", "consumables", "vendors", ["vendor_id"], ["id"]
+        )
 
 
 def downgrade() -> None:

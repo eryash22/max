@@ -31,9 +31,19 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.alter_column("notification_templates", "whatsapp_auto_send", new_column_name="auto_send")
-    op.add_column("notifications", sa.Column("dedup_key", sa.String(), nullable=True))
-    op.create_index("ix_notifications_dedup_key", "notifications", ["dedup_key"])
+    # Hosting-deploy pass — on a database migrated straight from byte-empty to head,
+    # 0025 (fixed the same way) leaves the column already named "auto_send" (today's
+    # final model name), so there is nothing left to rename here.
+    bind = op.get_bind()
+    template_cols = {c["name"] for c in sa.inspect(bind).get_columns("notification_templates")}
+    if "whatsapp_auto_send" in template_cols:
+        op.alter_column("notification_templates", "whatsapp_auto_send", new_column_name="auto_send")
+
+    notification_cols = {c["name"] for c in sa.inspect(bind).get_columns("notifications")}
+    if "dedup_key" not in notification_cols:
+        op.add_column("notifications", sa.Column("dedup_key", sa.String(), nullable=True))
+    if "ix_notifications_dedup_key" not in {ix["name"] for ix in sa.inspect(bind).get_indexes("notifications")}:
+        op.create_index("ix_notifications_dedup_key", "notifications", ["dedup_key"])
 
 
 def downgrade() -> None:
