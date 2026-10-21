@@ -1,9 +1,10 @@
 const TONE_BY_KEYWORD: { match: RegExp; tone: string }[] = [
-  { match: /^(active|ok|completed|ready|approved|resolved|connected|up_to_date)$/i, tone: "success" },
-  { match: /^(pending|uploaded|validating|deferred|not_provided)$/i, tone: "neutral" },
-  { match: /^(review_queue|duplicate_candidate|warning|partially_rolled_back)$/i, tone: "warning" },
-  { match: /^(error|rejected|failed|blocked|unreachable|rollback_blocked)$/i, tone: "danger" },
+  { match: /^(active|ok|completed|ready|approved|resolved|connected|up_to_date|operational)$/i, tone: "success" },
+  { match: /^(pending|uploaded|validating|deferred|not_provided|cancelled)$/i, tone: "neutral" },
+  { match: /^(review_queue|duplicate_candidate|warning|partially_rolled_back|work_in_progress)$/i, tone: "warning" },
+  { match: /^(error|rejected|failed|blocked|unreachable|rollback_blocked|open)$/i, tone: "danger" },
   { match: /location_asset_verification_required|misplaced/i, tone: "danger" },
+  { match: /^(to_be_condemned)$/i, tone: "info" },
 ];
 
 function toneFor(value: string): string {

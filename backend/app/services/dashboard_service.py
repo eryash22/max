@@ -85,6 +85,19 @@ def resolve_scope(current_user: CurrentUser, requested_branch_id: str | None) ->
     return None, "ORGANIZATION"
 
 
+def _current_financial_year_bounds():
+    """Indian financial year: 1 Apr -> 31 Mar. Returns (start, end) as naive
+    datetimes spanning the FY the current date falls in, so "this FY" always means
+    the one in progress right now regardless of when the dashboard is loaded."""
+    from datetime import datetime
+
+    today = datetime.utcnow()
+    start_year = today.year if today.month >= 4 else today.year - 1
+    start = datetime(start_year, 4, 1)
+    end = datetime(start_year + 1, 4, 1)
+    return start, end
+
+
 def _incident_section(db: Session, branch_id: str | None) -> dict:
     base = [Incident.branch_id == branch_id] if branch_id else []
     by_status = _zero_filled(_counts_by(db, Incident.status, *base), _incident_vocabulary())
@@ -98,6 +111,13 @@ def _incident_section(db: Session, branch_id: str | None) -> dict:
         .scalar()
         or 0
     )
+    fy_start, fy_end = _current_financial_year_bounds()
+    current_fy_total = (
+        db.query(func.count(Incident.id))
+        .filter(Incident.created_at >= fy_start, Incident.created_at < fy_end, *base)
+        .scalar()
+        or 0
+    )
     return {
         "total": sum(by_status.values()),
         "open": open_total,
@@ -105,6 +125,7 @@ def _incident_section(db: Session, branch_id: str | None) -> dict:
         "by_status": by_status,
         "by_severity": by_severity,
         "open_statuses": list(INCIDENT_OPEN_STATUSES),
+        "current_financial_year_total": current_fy_total,
     }
 
 

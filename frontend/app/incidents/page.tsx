@@ -13,9 +13,22 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { usePaginatedResource } from "../../hooks/usePaginatedResource";
 import { useLookup } from "../../hooks/useLookup";
 import { useAuth } from "../../hooks/useAuth";
+import { useAssetVendorMap } from "../../hooks/useDeviceVendorInfo";
 import { api, ApiError } from "../../lib/api";
-import type { Branch, Incident } from "../../types";
+import type { Asset, Branch, DeviceModel, Incident, Vendor } from "../../types";
 import { INCIDENT_SEVERITIES, INCIDENT_STATUSES } from "../../types";
+
+// DD/MM/YYYY (and a month name for extra clarity) instead of the browser-locale
+// default `toLocaleDateString()` would give — that silently renders as MM/DD/YYYY
+// for an en-US browser, which misreads a day-of-month above 12 as a different month
+// entirely (the exact confusion this was built to avoid).
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "-";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = d.toLocaleString("en-GB", { month: "short" });
+  return `${day} ${month} ${d.getFullYear()}`;
+}
 
 export default function IncidentsPage() {
   const [search, setSearch] = useState("");
@@ -48,6 +61,27 @@ export default function IncidentsPage() {
   const { data, page, setPage, loading, error, reload } = usePaginatedResource<Incident>("/api/v1/incidents", query);
   const branches = useLookup<Branch>("/api/v1/branches");
   const branchName = (id: string) => branches.find((b) => b.id === id)?.name ?? id;
+
+  // Device name + vendor aren't stored on Incident directly — both are resolved via
+  // the reported Asset's DeviceModel (same "derive, don't duplicate" discipline the
+  // rest of the app uses for vendor/coverage). Device Catalog admin visibility isn't
+  // required here — only the handful of display fields already safe for any
+  // incident.read holder.
+  const assets = useLookup<Asset>("/api/v1/assets");
+  const assetById = new Map(assets.map((a) => [a.id, a]));
+  const models = useLookup<DeviceModel>("/api/v1/device-models");
+  const modelById = new Map(models.map((m) => [m.id, m]));
+  const vendors = useLookup<Vendor>("/api/v1/vendors");
+  const vendorByModel = useAssetVendorMap(vendors);
+  const deviceNameFor = (i: Incident) => {
+    const asset = i.asset_id ? assetById.get(i.asset_id) : undefined;
+    const model = asset ? modelById.get(asset.device_model_id) : undefined;
+    return model?.name ?? "-";
+  };
+  const vendorNameFor = (i: Incident) => {
+    const asset = i.asset_id ? assetById.get(i.asset_id) : undefined;
+    return (asset ? vendorByModel.get(asset.device_model_id)?.name : undefined) ?? "-";
+  };
 
   // Client-side sort over the current page's rows — the backend already orders by
   // newest-first, so "Date (newest)" needs no extra work; the other options just
@@ -152,24 +186,35 @@ export default function IncidentsPage() {
               {
                 key: "date",
                 header: "Date",
-                render: (i) => new Date(i.created_at).toLocaleDateString(),
+                render: (i) => <span style={{ whiteSpace: "nowrap" }}>{formatDate(i.created_at)}</span>,
               },
+              { key: "device", header: "Device Name", render: (i) => deviceNameFor(i) },
+              { key: "branch", header: "Branch", render: (i) => branchName(i.branch_id) },
+              { key: "vendor", header: "Vendor", render: (i) => vendorNameFor(i) },
               {
                 key: "description",
-                header: "Description",
+                header: "Issue Description",
                 render: (i) => (
                   <Link
                     href={`/incidents/${i.id}`}
-                    style={{ display: "inline-block", whiteSpace: "normal", wordBreak: "break-word", maxWidth: 480 }}
+                    style={{ display: "inline-block", whiteSpace: "normal", wordBreak: "break-word", minWidth: 260 }}
                   >
                     {i.description}
                   </Link>
                 ),
               },
-              { key: "branch", header: "Branch", render: (i) => branchName(i.branch_id) },
               { key: "severity", header: "Severity", render: (i) => <StatusBadge value={i.severity} /> },
               { key: "status", header: "Status", render: (i) => <StatusBadge value={i.status} /> },
               { key: "category", header: "Category", render: (i) => i.problem_category ?? "-" },
+              {
+                key: "remark",
+                header: "Remark",
+                render: (i) => (
+                  <span style={{ whiteSpace: "normal", wordBreak: "break-word", minWidth: 160, display: "inline-block" }}>
+                    {i.resolution ?? "-"}
+                  </span>
+                ),
+              },
               ...(canManage
                 ? [
                     {

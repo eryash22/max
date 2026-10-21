@@ -733,21 +733,59 @@ function buildKpis(
     );
   }
   if (summary.incidents) {
+    const byStatus = summary.incidents.by_status;
     cards.push(
       <KpiCard
-        key="incidents"
+        key="incidents-open"
         label="Open incidents"
-        value={summary.incidents.open}
-        tone={summary.incidents.open > 0 ? "warning" : "success"}
+        value={byStatus.OPEN ?? 0}
+        tone={(byStatus.OPEN ?? 0) > 0 ? "danger" : "success"}
         state={
           summary.incidents.critical_open > 0
             ? `${summary.incidents.critical_open} critical`
             : "None critical"
         }
         emphasis={inventoryFocused ? undefined : "lead"}
-        // The incidents page filters one status at a time, and "open" spans nine
-        // statuses — so this links to the unfiltered list rather than inventing a
-        // filter the page cannot honour.
+        href={withBranch("/incidents?status_filter=OPEN")}
+      />,
+      <KpiCard
+        key="incidents-wip"
+        label="Work in progress"
+        value={byStatus.WORK_IN_PROGRESS ?? 0}
+        tone="warning"
+        state="Incidents"
+        href={withBranch("/incidents?status_filter=WORK_IN_PROGRESS")}
+      />,
+      <KpiCard
+        key="incidents-operational"
+        label="Operational"
+        value={byStatus.OPERATIONAL ?? 0}
+        tone="success"
+        state="Resolved incidents"
+        href={withBranch("/incidents?status_filter=OPERATIONAL")}
+      />
+    );
+  }
+  if (summary.assets) {
+    cards.push(
+      <KpiCard
+        key="condemned"
+        label="Total condemned"
+        value={summary.assets.condemned}
+        tone={summary.assets.condemned > 0 ? "danger" : "success"}
+        state="Devices"
+        href={withBranch("/assets?status_filter=CONDEMNED")}
+      />
+    );
+  }
+  if (summary.incidents) {
+    cards.push(
+      <KpiCard
+        key="incidents-fy"
+        label="Incidents this financial year"
+        value={summary.incidents.current_financial_year_total}
+        tone="info"
+        state="1 Apr – 31 Mar"
         href={withBranch("/incidents")}
       />
     );

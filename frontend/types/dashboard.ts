@@ -15,6 +15,9 @@ export interface DashboardIncidents {
   /** The canonical open-status list (F1). Used to build drill-down links so a chart
    * click filters on exactly the definition the count was computed from. */
   open_statuses: string[];
+  /** Incidents created within the Indian financial year currently in progress
+   * (1 Apr -> 31 Mar), independent of status. */
+  current_financial_year_total: number;
 }
 
 export interface DashboardRequirements {
@@ -140,17 +143,10 @@ export type Tone = "success" | "warning" | "danger" | "info" | "neutral";
 /** Status -> tone, defined once so every visual agrees. Derived from the real backend
  * vocabularies, not invented. */
 export const INCIDENT_STATUS_TONE: Record<string, Tone> = {
-  NEW: "warning",
-  ACKNOWLEDGED: "warning",
-  ASSIGNED: "info",
-  UNDER_DIAGNOSIS: "info",
-  WAITING_FOR_VENDOR: "info",
-  WAITING_FOR_PART: "info",
-  WAITING_FOR_USER: "info",
-  ESCALATED: "danger",
-  PENDING_VERIFICATION: "warning",
-  RESOLVED: "success",
-  CLOSED: "neutral",
+  OPEN: "danger",
+  WORK_IN_PROGRESS: "warning",
+  TO_BE_CONDEMNED: "info",
+  OPERATIONAL: "success",
   CANCELLED: "neutral",
 };
 
