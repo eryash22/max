@@ -75,6 +75,7 @@ def list_incidents(
     severity: str | None = None,
     asset_id: str | None = None,
     assigned_engineer_id: str | None = None,
+    vendor_id: str | None = None,
     created_after: str | None = None,
     created_before: str | None = None,
     db: Session = Depends(get_db),
@@ -95,19 +96,23 @@ def list_incidents(
         if value is not None:
             query = query.filter(getattr(Incident, field) == value)
 
-    if search:
-        like = f"%{search}%"
-        # Searches every column the Incidents list page actually displays, not just
-        # description/category — device name, branch and vendor need joins since
-        # they aren't stored on Incident directly (Vendor via the device model's
-        # primary/alternative mapping, same as qr_service.primary_vendor_name).
+    # Device name, branch and vendor aren't stored on Incident directly (Vendor via
+    # the device model's primary/alternative mapping, same as
+    # qr_service.primary_vendor_name) — both `search` (matched against every column
+    # the list page displays) and the dedicated `vendor_id` filter need these joins,
+    # so they share one outerjoin chain instead of duplicating it.
+    if search or vendor_id:
         query = (
             query.outerjoin(Asset, Incident.asset_id == Asset.id)
             .outerjoin(DeviceModel, Asset.device_model_id == DeviceModel.id)
             .outerjoin(Branch, Incident.branch_id == Branch.id)
             .outerjoin(DeviceModelVendor, DeviceModelVendor.device_model_id == Asset.device_model_id)
             .outerjoin(Vendor, Vendor.id == DeviceModelVendor.vendor_id)
-            .filter(
+            .distinct()
+        )
+        if search:
+            like = f"%{search}%"
+            query = query.filter(
                 or_(
                     Incident.description.ilike(like),
                     Incident.problem_category.ilike(like),
@@ -120,8 +125,8 @@ def list_incidents(
                     Vendor.name.ilike(like),
                 )
             )
-            .distinct()
-        )
+        if vendor_id:
+            query = query.filter(DeviceModelVendor.vendor_id == vendor_id)
 
     if created_after:
         query = query.filter(Incident.created_at >= datetime.fromisoformat(created_after))

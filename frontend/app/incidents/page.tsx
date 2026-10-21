@@ -35,6 +35,7 @@ export default function IncidentsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [severity, setSeverity] = useState("");
   const [branchId, setBranchId] = useState("");
+  const [vendorId, setVendorId] = useState("");
   const [sortBy, setSortBy] = useState("date_desc");
 
   // Restructure consolidation pass, Part B — hydrate filters from the URL on mount so
@@ -47,9 +48,11 @@ export default function IncidentsPage() {
     const bf = params.get("branch_id");
     const sf = params.get("status_filter");
     const sev = params.get("severity");
+    const vf = params.get("vendor_id");
     if (bf) setBranchId(bf);
     if (sf) setStatusFilter(sf);
     if (sev) setSeverity(sev);
+    if (vf) setVendorId(vf);
   }, []);
 
   const query: Record<string, string> = {};
@@ -57,6 +60,7 @@ export default function IncidentsPage() {
   if (statusFilter) query.status_filter = statusFilter;
   if (severity) query.severity = severity;
   if (branchId) query.branch_id = branchId;
+  if (vendorId) query.vendor_id = vendorId;
 
   const { data, page, setPage, loading, error, reload } = usePaginatedResource<Incident>("/api/v1/incidents", query);
   const branches = useLookup<Branch>("/api/v1/branches");
@@ -100,6 +104,10 @@ export default function IncidentsPage() {
             return a.severity.localeCompare(b.severity);
           case "branch":
             return branchName(a.branch_id).localeCompare(branchName(b.branch_id));
+          case "vendor":
+            return vendorNameFor(a).localeCompare(vendorNameFor(b));
+          case "device":
+            return deviceNameFor(a).localeCompare(deviceNameFor(b));
           default:
             return 0;
         }
@@ -171,12 +179,22 @@ export default function IncidentsPage() {
             </option>
           ))}
         </select>
+        <select value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
+          <option value="">All vendors</option>
+          {vendors.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name}
+            </option>
+          ))}
+        </select>
         <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
           <option value="date_desc">Sort: Date (newest)</option>
           <option value="date_asc">Sort: Date (oldest)</option>
           <option value="status">Sort: Status</option>
           <option value="severity">Sort: Severity</option>
           <option value="branch">Sort: Branch</option>
+          <option value="vendor">Sort: Vendor</option>
+          <option value="device">Sort: Device name</option>
         </select>
       </div>
 
