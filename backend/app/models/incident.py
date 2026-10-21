@@ -35,6 +35,23 @@ class Incident(BaseModel):
     closed_at: Mapped[str | None] = mapped_column(String, nullable=True)
     closure_approved_by: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Lightweight procurement reference fields — plain text/number reference data for
+    # display and spend totals, deliberately NOT a real Quotation/Indent/PurchaseOrder
+    # chain (see Module 21's procurement module for that full approval workflow).
+    # These exist so historical CER/Indent/PO numbers and costs can be recorded and
+    # summed on the dashboard without forcing every incident through the full
+    # procurement approval flow.
+    cer_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    indent_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    po_number: Mapped[str | None] = mapped_column(String, nullable=True)
+    po_closure_date: Mapped[str | None] = mapped_column(String, nullable=True)
+    po_cost_excl_gst: Mapped[float | None] = mapped_column(Float, nullable=True)
+    po_gst_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    po_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    vendor_estimate_cost_excl_gst: Mapped[float | None] = mapped_column(Float, nullable=True)
+    vendor_estimate_gst_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    vendor_estimate_cost_incl_gst: Mapped[float | None] = mapped_column(Float, nullable=True)
+
 
 class IncidentStatusHistory(BaseModel):
     """Every state transition an incident goes through — the auditable trail Part 3/4 require."""

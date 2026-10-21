@@ -215,6 +215,36 @@ export default function IncidentsPage() {
                   </span>
                 ),
               },
+              { key: "cer", header: "CER No.", render: (i) => i.cer_number ?? "-" },
+              { key: "indent", header: "Indent No.", render: (i) => i.indent_number ?? "-" },
+              { key: "po_number", header: "PO No.", render: (i) => i.po_number ?? "-" },
+              { key: "po_closure", header: "PO Closure Date", render: (i) => i.po_closure_date ?? "-" },
+              {
+                key: "po_cost_excl",
+                header: "PO Cost (excl. GST)",
+                render: (i) => (i.po_cost_excl_gst != null ? `₹${i.po_cost_excl_gst.toLocaleString("en-IN")}` : "-"),
+              },
+              {
+                key: "po_amount",
+                header: "PO Amount (incl. GST)",
+                render: (i) => (i.po_amount != null ? `₹${i.po_amount.toLocaleString("en-IN")}` : "-"),
+              },
+              {
+                key: "vendor_estimate_excl",
+                header: "Vendor Estimate (excl. GST)",
+                render: (i) =>
+                  i.vendor_estimate_cost_excl_gst != null
+                    ? `₹${i.vendor_estimate_cost_excl_gst.toLocaleString("en-IN")}`
+                    : "-",
+              },
+              {
+                key: "vendor_estimate_incl",
+                header: "Vendor Estimate (incl. GST)",
+                render: (i) =>
+                  i.vendor_estimate_cost_incl_gst != null
+                    ? `₹${i.vendor_estimate_cost_incl_gst.toLocaleString("en-IN")}`
+                    : "-",
+              },
               ...(canManage
                 ? [
                     {

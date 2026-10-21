@@ -85,20 +85,34 @@ def resolve_scope(current_user: CurrentUser, requested_branch_id: str | None) ->
     return None, "ORGANIZATION"
 
 
-def _current_financial_year_bounds():
-    """Indian financial year: 1 Apr -> 31 Mar. Returns (start, end) as naive
-    datetimes spanning the FY the current date falls in, so "this FY" always means
-    the one in progress right now regardless of when the dashboard is loaded."""
+def _period_bounds(period: str, year: int | None, month: int | None):
+    """Flexible replacement for the old fixed-financial-year window. `period` is
+    "year" (all of `year`, defaulting to the current year), "month" (`year`/`month`,
+    defaulting to the current month) or "overall" (no bound — every incident).
+    Returns (start, end) naive datetimes, or (None, None) for "overall"."""
     from datetime import datetime
 
     today = datetime.utcnow()
-    start_year = today.year if today.month >= 4 else today.year - 1
-    start = datetime(start_year, 4, 1)
-    end = datetime(start_year + 1, 4, 1)
-    return start, end
+    if period == "year":
+        y = year or today.year
+        return datetime(y, 1, 1), datetime(y + 1, 1, 1)
+    if period == "month":
+        y = year or today.year
+        m = month or today.month
+        start = datetime(y, m, 1)
+        end = datetime(y + 1, 1, 1) if m == 12 else datetime(y, m + 1, 1)
+        return start, end
+    return None, None
 
 
-def _incident_section(db: Session, branch_id: str | None) -> dict:
+def _incident_section(
+    db: Session,
+    branch_id: str | None,
+    *,
+    period: str = "overall",
+    period_year: int | None = None,
+    period_month: int | None = None,
+) -> dict:
     base = [Incident.branch_id == branch_id] if branch_id else []
     by_status = _zero_filled(_counts_by(db, Incident.status, *base), _incident_vocabulary())
     by_severity = _counts_by(db, Incident.severity, *base)
@@ -111,13 +125,17 @@ def _incident_section(db: Session, branch_id: str | None) -> dict:
         .scalar()
         or 0
     )
-    fy_start, fy_end = _current_financial_year_bounds()
-    current_fy_total = (
-        db.query(func.count(Incident.id))
-        .filter(Incident.created_at >= fy_start, Incident.created_at < fy_end, *base)
-        .scalar()
-        or 0
+    period_start, period_end = _period_bounds(period, period_year, period_month)
+    period_filters = list(base)
+    if period_start is not None:
+        period_filters += [Incident.created_at >= period_start, Incident.created_at < period_end]
+    period_total = db.query(func.count(Incident.id)).filter(*period_filters).scalar() or 0
+
+    po_spending_incl_gst = db.query(func.coalesce(func.sum(Incident.po_amount), 0)).filter(*base).scalar() or 0
+    po_spending_excl_gst = (
+        db.query(func.coalesce(func.sum(Incident.po_cost_excl_gst), 0)).filter(*base).scalar() or 0
     )
+
     return {
         "total": sum(by_status.values()),
         "open": open_total,
@@ -125,7 +143,13 @@ def _incident_section(db: Session, branch_id: str | None) -> dict:
         "by_status": by_status,
         "by_severity": by_severity,
         "open_statuses": list(INCIDENT_OPEN_STATUSES),
-        "current_financial_year_total": current_fy_total,
+        "to_be_condemned": by_status.get("TO_BE_CONDEMNED", 0),
+        "period": period,
+        "period_year": period_year,
+        "period_month": period_month,
+        "period_total": period_total,
+        "po_spending_incl_gst": float(po_spending_incl_gst),
+        "po_spending_excl_gst": float(po_spending_excl_gst),
     }
 
 
@@ -300,7 +324,15 @@ def _branch_rows(db: Session, current_user: CurrentUser, *, can_incident: bool, 
     ]
 
 
-def compute_dashboard(db: Session, current_user: CurrentUser, *, branch_id: str | None = None) -> dict:
+def compute_dashboard(
+    db: Session,
+    current_user: CurrentUser,
+    *,
+    branch_id: str | None = None,
+    period: str = "overall",
+    period_year: int | None = None,
+    period_month: int | None = None,
+) -> dict:
     """The whole dashboard in one response, shaped by the caller's permissions."""
     perms = current_user.permissions
     scope_branch_id, scope_kind = resolve_scope(current_user, branch_id)
@@ -328,7 +360,9 @@ def compute_dashboard(db: Session, current_user: CurrentUser, *, branch_id: str 
         result["assets"] = _asset_section(db, scope_branch_id)
         result["sections"].append("assets")
     if can_incident:
-        result["incidents"] = _incident_section(db, scope_branch_id)
+        result["incidents"] = _incident_section(
+            db, scope_branch_id, period=period, period_year=period_year, period_month=period_month
+        )
         result["sections"].append("incidents")
     if can_requirement:
         result["requirements"] = _requirement_section(db, scope_branch_id)

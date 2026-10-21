@@ -15,9 +15,20 @@ export interface DashboardIncidents {
   /** The canonical open-status list (F1). Used to build drill-down links so a chart
    * click filters on exactly the definition the count was computed from. */
   open_statuses: string[];
-  /** Incidents created within the Indian financial year currently in progress
-   * (1 Apr -> 31 Mar), independent of status. */
-  current_financial_year_total: number;
+  /** by_status["TO_BE_CONDEMNED"], surfaced separately since it's shown as its own
+   * KPI tile (not the asset lifecycle's `condemned`, which only reflects assets that
+   * actually finished the real condemnation workflow). */
+  to_be_condemned: number;
+  /** Echo of the period filter the backend computed `period_total` for. */
+  period: "overall" | "year" | "month";
+  period_year: number | null;
+  period_month: number | null;
+  /** Incidents created within the selected period (see `period`/`period_year`/
+   * `period_month`), independent of status. Replaces the old fixed financial-year tile. */
+  period_total: number;
+  /** sum(po_amount) / sum(po_cost_excl_gst) across every incident with PO data. */
+  po_spending_incl_gst: number;
+  po_spending_excl_gst: number;
 }
 
 export interface DashboardRequirements {

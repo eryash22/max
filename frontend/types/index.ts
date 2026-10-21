@@ -668,6 +668,18 @@ export interface Incident {
   closed_by: string | null;
   closed_at: string | null;
   closure_approved_by: string | null;
+  // Lightweight procurement reference fields — plain display/spend-total data, not a
+  // real Quotation/Indent/PurchaseOrder chain (see backend/app/models/incident.py).
+  cer_number: string | null;
+  indent_number: string | null;
+  po_number: string | null;
+  po_closure_date: string | null;
+  po_cost_excl_gst: number | null;
+  po_gst_percent: number | null;
+  po_amount: number | null;
+  vendor_estimate_cost_excl_gst: number | null;
+  vendor_estimate_gst_percent: number | null;
+  vendor_estimate_cost_incl_gst: number | null;
   // Only populated on the single-incident detail read (GET /incidents/{id}) when
   // asset_id is set — see routers/incidents.py.
   coverage?: IncidentCoverage | null;

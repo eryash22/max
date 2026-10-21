@@ -46,6 +46,17 @@ class IncidentUpdateIn(BaseModel):
     root_cause: str | None = None
     corrective_action: str | None = None
     preventive_action: str | None = None
+    problem_category: str | None = None
+    cer_number: str | None = None
+    indent_number: str | None = None
+    po_number: str | None = None
+    po_closure_date: str | None = None
+    po_cost_excl_gst: float | None = None
+    po_gst_percent: float | None = None
+    po_amount: float | None = None
+    vendor_estimate_cost_excl_gst: float | None = None
+    vendor_estimate_gst_percent: float | None = None
+    vendor_estimate_cost_incl_gst: float | None = None
 
 
 class IncidentStatusChangeIn(BaseModel):
@@ -114,6 +125,16 @@ class IncidentOut(BaseModel):
     closed_by: str | None = None
     closed_at: str | None = None
     closure_approved_by: str | None = None
+    cer_number: str | None = None
+    indent_number: str | None = None
+    po_number: str | None = None
+    po_closure_date: str | None = None
+    po_cost_excl_gst: float | None = None
+    po_gst_percent: float | None = None
+    po_amount: float | None = None
+    vendor_estimate_cost_excl_gst: float | None = None
+    vendor_estimate_gst_percent: float | None = None
+    vendor_estimate_cost_incl_gst: float | None = None
     # Only populated by GET /incidents/{id} (detail) when asset_id is set — list
     # endpoints leave this None to avoid an extra query per row. See routers/incidents.py.
     coverage: IncidentCoverageOut | None = None

@@ -25,11 +25,20 @@ router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 @router.get("/summary")
 def get_dashboard_summary(
     branch_id: str | None = None,
+    period: str = "overall",
+    period_year: int | None = None,
+    period_month: int | None = None,
     db: Session = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """`branch_id` is the Power BI-style branch cross-filter. It is honoured only for
     callers who legitimately have organisation-wide visibility — a UNIT_HEAD/TL is
     pinned to their assigned branch by dashboard_service.resolve_scope() and cannot
-    widen scope by passing someone else's branch id."""
-    return dashboard_service.compute_dashboard(db, current_user, branch_id=branch_id)
+    widen scope by passing someone else's branch id.
+
+    `period`/`period_year`/`period_month` drive the incidents "period total" tile —
+    "year" (a calendar year), "month" (a specific year+month) or "overall" (no date
+    bound at all), replacing the old fixed financial-year window."""
+    return dashboard_service.compute_dashboard(
+        db, current_user, branch_id=branch_id, period=period, period_year=period_year, period_month=period_month
+    )

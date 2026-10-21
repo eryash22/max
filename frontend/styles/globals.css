@@ -799,6 +799,22 @@ textarea:disabled {
   color: var(--color-link-hover);
 }
 
+.dash-period-filter {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dash-period-filter__select {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
 .dash-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

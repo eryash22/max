@@ -126,23 +126,38 @@ export default function DashboardPage() {
    * the server pins branch-scoped roles regardless of what is sent. */
   const [branchFilter, setBranchFilter] = useState<string | null>(null);
 
-  const load = useCallback(async (branchId: string | null) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const query = branchId ? `?branch_id=${encodeURIComponent(branchId)}` : "";
-      const result = await api.get<DashboardSummary>(`/api/v1/dashboard/summary${query}`);
-      setSummary(result);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load the dashboard.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Replaces the old fixed "financial year" incidents tile — Overall by default,
+  // or a specific calendar year / year+month the user picks.
+  const now = useMemo(() => new Date(), []);
+  const [periodMode, setPeriodMode] = useState<"overall" | "year" | "month">("overall");
+  const [periodYear, setPeriodYear] = useState<number>(now.getFullYear());
+  const [periodMonth, setPeriodMonth] = useState<number>(now.getMonth() + 1);
+
+  const load = useCallback(
+    async (branchId: string | null, mode: "overall" | "year" | "month", year: number, month: number) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams();
+        if (branchId) params.set("branch_id", branchId);
+        params.set("period", mode);
+        if (mode !== "overall") params.set("period_year", String(year));
+        if (mode === "month") params.set("period_month", String(month));
+        const query = params.toString();
+        const result = await api.get<DashboardSummary>(`/api/v1/dashboard/summary?${query}`);
+        setSummary(result);
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Could not load the dashboard.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
-    load(branchFilter);
-  }, [load, branchFilter]);
+    load(branchFilter, periodMode, periodYear, periodMonth);
+  }, [load, branchFilter, periodMode, periodYear, periodMonth]);
 
   const scopeBranchId = summary?.branch_id ?? null;
   /** Appended to drill-down links so a filtered page opens in the same context the
@@ -242,7 +257,7 @@ export default function DashboardPage() {
           <h1>Operations</h1>
         </div>
         <ErrorState message={error} />
-        <button type="button" className="btn btn--primary" onClick={() => load(branchFilter)}>
+        <button type="button" className="btn btn--primary" onClick={() => load(branchFilter, periodMode, periodYear, periodMonth)}>
           Try again
         </button>
       </ProtectedShell>
@@ -281,7 +296,7 @@ export default function DashboardPage() {
           <button
             type="button"
             className="btn"
-            onClick={() => load(branchFilter)}
+            onClick={() => load(branchFilter, periodMode, periodYear, periodMonth)}
             disabled={loading}
           >
             {loading ? "Refreshing…" : "Refresh"}
@@ -361,7 +376,55 @@ export default function DashboardPage() {
               const cards = buildKpis(summary, roles, withBranch);
               if (cards.length === 0) return null;
               return (
-                <Panel key="operations" title="Key numbers" span="full">
+                <Panel
+                  key="operations"
+                  title="Key numbers"
+                  span="full"
+                  action={
+                    summary.incidents ? (
+                      <div className="dash-period-filter">
+                        <select
+                          className="dash-period-filter__select"
+                          value={periodMode}
+                          onChange={(e) => setPeriodMode(e.target.value as "overall" | "year" | "month")}
+                          aria-label="Incident period"
+                        >
+                          <option value="overall">Overall</option>
+                          <option value="year">By year</option>
+                          <option value="month">By month</option>
+                        </select>
+                        {periodMode !== "overall" && (
+                          <select
+                            className="dash-period-filter__select"
+                            value={periodYear}
+                            onChange={(e) => setPeriodYear(Number(e.target.value))}
+                            aria-label="Year"
+                          >
+                            {Array.from({ length: 6 }, (_, i) => now.getFullYear() - i).map((y) => (
+                              <option key={y} value={y}>
+                                {y}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {periodMode === "month" && (
+                          <select
+                            className="dash-period-filter__select"
+                            value={periodMonth}
+                            onChange={(e) => setPeriodMonth(Number(e.target.value))}
+                            aria-label="Month"
+                          >
+                            {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                              <option key={m} value={m}>
+                                {new Date(2000, m - 1, 1).toLocaleString("en-GB", { month: "long" })}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    ) : undefined
+                  }
+                >
                   <div className="dash-kpi-row">{cards}</div>
                 </Panel>
               );
@@ -766,26 +829,56 @@ function buildKpis(
       />
     );
   }
-  if (summary.assets) {
+  if (summary.incidents) {
     cards.push(
       <KpiCard
         key="condemned"
         label="Total condemned"
-        value={summary.assets.condemned}
-        tone={summary.assets.condemned > 0 ? "danger" : "success"}
-        state="Devices"
-        href={withBranch("/assets?status_filter=CONDEMNED")}
+        value={summary.incidents.to_be_condemned}
+        tone={summary.incidents.to_be_condemned > 0 ? "danger" : "success"}
+        state="To be condemned"
+        href={withBranch("/incidents?status_filter=TO_BE_CONDEMNED")}
       />
     );
   }
   if (summary.incidents) {
+    const periodState =
+      summary.incidents.period === "overall"
+        ? "All time"
+        : summary.incidents.period === "year"
+          ? String(summary.incidents.period_year ?? "")
+          : `${new Date(2000, (summary.incidents.period_month ?? 1) - 1, 1).toLocaleString("en-GB", {
+              month: "short",
+            })} ${summary.incidents.period_year ?? ""}`;
     cards.push(
       <KpiCard
-        key="incidents-fy"
-        label="Incidents this financial year"
-        value={summary.incidents.current_financial_year_total}
+        key="incidents-period"
+        label="Incidents reported"
+        value={summary.incidents.period_total}
         tone="info"
-        state="1 Apr – 31 Mar"
+        state={periodState}
+        href={withBranch("/incidents")}
+      />
+    );
+  }
+  if (summary.incidents) {
+    const fmtInr = (n: number) =>
+      `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+    cards.push(
+      <KpiCard
+        key="po-spend-incl"
+        label="Total PO spending (incl. GST)"
+        value={fmtInr(summary.incidents.po_spending_incl_gst)}
+        tone="neutral"
+        state="All incidents"
+        href={withBranch("/incidents")}
+      />,
+      <KpiCard
+        key="po-spend-excl"
+        label="Total PO spending (excl. GST)"
+        value={fmtInr(summary.incidents.po_spending_excl_gst)}
+        tone="neutral"
+        state="All incidents"
         href={withBranch("/incidents")}
       />
     );

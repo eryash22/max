@@ -10,8 +10,9 @@ import { StatusBadge } from "../../../components/StatusBadge";
 import { ConfirmDialog } from "../../../components/ConfirmDialog";
 import { useAuth } from "../../../hooks/useAuth";
 import { useLookup } from "../../../hooks/useLookup";
+import { useUserDirectory } from "../../../hooks/useUserDirectory";
 import { api, ApiError } from "../../../lib/api";
-import type { Incident, IncidentStatusHistoryEntry, Vendor } from "../../../types";
+import type { Asset, Branch, DeviceModel, Incident, IncidentStatusHistoryEntry, Vendor } from "../../../types";
 import { INCIDENT_STATUSES } from "../../../types";
 
 export default function IncidentDetailPage() {
@@ -19,6 +20,18 @@ export default function IncidentDetailPage() {
   const { hasPermission } = useAuth();
   const vendors = useLookup<Vendor>("/api/v1/vendors");
   const vendorName = (id: string | null) => (id ? vendors.find((v) => v.id === id)?.name ?? id : "-");
+  const branches = useLookup<Branch>("/api/v1/branches");
+  const branchName = (id: string | null) => (id ? branches.find((b) => b.id === id)?.name ?? id : "-");
+  const assets = useLookup<Asset>("/api/v1/assets");
+  const models = useLookup<DeviceModel>("/api/v1/device-models");
+  const assetLabel = (id: string | null) => {
+    if (!id) return null;
+    const asset = assets.find((a) => a.id === id);
+    const model = asset ? models.find((m) => m.id === asset.device_model_id) : undefined;
+    return model?.name ?? asset?.asset_number ?? id;
+  };
+  const users = useUserDirectory();
+  const userName = (id: string | null) => (id ? users.find((u) => u.id === id)?.name ?? id : "Unassigned");
   const [incident, setIncident] = useState<Incident | null>(null);
   const [history, setHistory] = useState<IncidentStatusHistoryEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +150,22 @@ export default function IncidentDetailPage() {
         resolution: formData.get("resolution") || null,
         parts_used: formData.get("parts_used") || null,
         downtime_hours: formData.get("downtime_hours") ? Number(formData.get("downtime_hours")) : null,
+        cer_number: formData.get("cer_number") || null,
+        indent_number: formData.get("indent_number") || null,
+        po_number: formData.get("po_number") || null,
+        po_closure_date: formData.get("po_closure_date") || null,
+        po_cost_excl_gst: formData.get("po_cost_excl_gst") ? Number(formData.get("po_cost_excl_gst")) : null,
+        po_gst_percent: formData.get("po_gst_percent") ? Number(formData.get("po_gst_percent")) : null,
+        po_amount: formData.get("po_amount") ? Number(formData.get("po_amount")) : null,
+        vendor_estimate_cost_excl_gst: formData.get("vendor_estimate_cost_excl_gst")
+          ? Number(formData.get("vendor_estimate_cost_excl_gst"))
+          : null,
+        vendor_estimate_gst_percent: formData.get("vendor_estimate_gst_percent")
+          ? Number(formData.get("vendor_estimate_gst_percent"))
+          : null,
+        vendor_estimate_cost_incl_gst: formData.get("vendor_estimate_cost_incl_gst")
+          ? Number(formData.get("vendor_estimate_cost_incl_gst"))
+          : null,
       });
       await load();
     } catch (err) {
@@ -211,13 +240,13 @@ export default function IncidentDetailPage() {
           <tbody>
             <tr>
               <td>Branch</td>
-              <td>{incident.branch_id}</td>
+              <td>{branchName(incident.branch_id)}</td>
             </tr>
             <tr>
               <td>Asset</td>
               <td>
                 {incident.asset_id ? (
-                  <Link href={`/assets/${incident.asset_id}`}>{incident.asset_id}</Link>
+                  <Link href={`/assets/${incident.asset_id}`}>{assetLabel(incident.asset_id)}</Link>
                 ) : (
                   "Not linked"
                 )}
@@ -233,11 +262,11 @@ export default function IncidentDetailPage() {
             </tr>
             <tr>
               <td>Assigned engineer</td>
-              <td>{incident.assigned_engineer_id ?? "Unassigned"}</td>
+              <td>{userName(incident.assigned_engineer_id)}</td>
             </tr>
             <tr>
               <td>Assigned vendor</td>
-              <td>{incident.assigned_vendor_id ?? "-"}</td>
+              <td>{vendorName(incident.assigned_vendor_id)}</td>
             </tr>
             <tr>
               <td>Root cause</td>
@@ -250,6 +279,50 @@ export default function IncidentDetailPage() {
             <tr>
               <td>Downtime (hours)</td>
               <td>{incident.downtime_hours ?? "Not recorded"}</td>
+            </tr>
+            <tr>
+              <td>CER No.</td>
+              <td>{incident.cer_number ?? "-"}</td>
+            </tr>
+            <tr>
+              <td>Indent No.</td>
+              <td>{incident.indent_number ?? "-"}</td>
+            </tr>
+            <tr>
+              <td>PO No.</td>
+              <td>{incident.po_number ?? "-"}</td>
+            </tr>
+            <tr>
+              <td>PO closure date</td>
+              <td>{incident.po_closure_date ?? "-"}</td>
+            </tr>
+            <tr>
+              <td>PO cost (excl. GST)</td>
+              <td>{incident.po_cost_excl_gst != null ? `₹${incident.po_cost_excl_gst.toLocaleString("en-IN")}` : "-"}</td>
+            </tr>
+            <tr>
+              <td>PO GST %</td>
+              <td>{incident.po_gst_percent ?? "-"}</td>
+            </tr>
+            <tr>
+              <td>PO amount (incl. GST)</td>
+              <td>{incident.po_amount != null ? `₹${incident.po_amount.toLocaleString("en-IN")}` : "-"}</td>
+            </tr>
+            <tr>
+              <td>Vendor estimate (excl. GST)</td>
+              <td>
+                {incident.vendor_estimate_cost_excl_gst != null
+                  ? `₹${incident.vendor_estimate_cost_excl_gst.toLocaleString("en-IN")}`
+                  : "-"}
+              </td>
+            </tr>
+            <tr>
+              <td>Vendor estimate (incl. GST)</td>
+              <td>
+                {incident.vendor_estimate_cost_incl_gst != null
+                  ? `₹${incident.vendor_estimate_cost_incl_gst.toLocaleString("en-IN")}`
+                  : "-"}
+              </td>
             </tr>
           </tbody>
         </table>
@@ -402,12 +475,26 @@ export default function IncidentDetailPage() {
           <h3 style={{ marginTop: 0 }}>Assign</h3>
           <form onSubmit={handleAssign} className="form-grid">
             <div className="form-field">
-              <label>Engineer user ID</label>
-              <input name="assigned_engineer_id" defaultValue={incident.assigned_engineer_id ?? ""} />
+              <label>Engineer</label>
+              <select name="assigned_engineer_id" defaultValue={incident.assigned_engineer_id ?? ""}>
+                <option value="">Unassigned</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="form-field">
-              <label>Vendor ID</label>
-              <input name="assigned_vendor_id" defaultValue={incident.assigned_vendor_id ?? ""} />
+              <label>Vendor</label>
+              <select name="assigned_vendor_id" defaultValue={incident.assigned_vendor_id ?? ""}>
+                <option value="">None</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="form-field" style={{ justifyContent: "flex-end" }}>
               <button className="btn btn--primary" type="submit" disabled={busy}>
@@ -464,6 +551,61 @@ export default function IncidentDetailPage() {
             <div className="form-field">
               <label>Downtime (hours)</label>
               <input name="downtime_hours" type="number" step="0.1" defaultValue={incident.downtime_hours ?? ""} />
+            </div>
+            <div className="form-field">
+              <label>CER No.</label>
+              <input name="cer_number" defaultValue={incident.cer_number ?? ""} />
+            </div>
+            <div className="form-field">
+              <label>Indent No.</label>
+              <input name="indent_number" defaultValue={incident.indent_number ?? ""} />
+            </div>
+            <div className="form-field">
+              <label>PO No.</label>
+              <input name="po_number" defaultValue={incident.po_number ?? ""} />
+            </div>
+            <div className="form-field">
+              <label>PO closure date</label>
+              <input name="po_closure_date" defaultValue={incident.po_closure_date ?? ""} />
+            </div>
+            <div className="form-field">
+              <label>PO cost (excl. GST)</label>
+              <input name="po_cost_excl_gst" type="number" step="0.01" defaultValue={incident.po_cost_excl_gst ?? ""} />
+            </div>
+            <div className="form-field">
+              <label>PO GST %</label>
+              <input name="po_gst_percent" type="number" step="0.01" defaultValue={incident.po_gst_percent ?? ""} />
+            </div>
+            <div className="form-field">
+              <label>PO amount (incl. GST)</label>
+              <input name="po_amount" type="number" step="0.01" defaultValue={incident.po_amount ?? ""} />
+            </div>
+            <div className="form-field">
+              <label>Vendor estimate (excl. GST)</label>
+              <input
+                name="vendor_estimate_cost_excl_gst"
+                type="number"
+                step="0.01"
+                defaultValue={incident.vendor_estimate_cost_excl_gst ?? ""}
+              />
+            </div>
+            <div className="form-field">
+              <label>Vendor estimate GST %</label>
+              <input
+                name="vendor_estimate_gst_percent"
+                type="number"
+                step="0.01"
+                defaultValue={incident.vendor_estimate_gst_percent ?? ""}
+              />
+            </div>
+            <div className="form-field">
+              <label>Vendor estimate (incl. GST)</label>
+              <input
+                name="vendor_estimate_cost_incl_gst"
+                type="number"
+                step="0.01"
+                defaultValue={incident.vendor_estimate_cost_incl_gst ?? ""}
+              />
             </div>
             <div className="form-field" style={{ justifyContent: "flex-end" }}>
               <button className="btn btn--primary" type="submit" disabled={busy}>
