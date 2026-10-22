@@ -10,15 +10,16 @@ import { StatusBadge } from "../../../../components/StatusBadge";
 import { ConfirmDialog } from "../../../../components/ConfirmDialog";
 import { useAuth } from "../../../../hooks/useAuth";
 import { useLookup } from "../../../../hooks/useLookup";
+import { useAssetLabel } from "../../../../hooks/useAssetLabel";
 import { api, ApiError } from "../../../../lib/api";
-import type { Asset, Incident, Indent, Page, Quotation, Vendor } from "../../../../types";
+import type { Incident, Indent, Page, Quotation, Vendor } from "../../../../types";
 
 export default function QuotationDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { hasPermission, user } = useAuth();
   const vendors = useLookup<Vendor>("/api/v1/vendors");
-  const assets = useLookup<Asset>("/api/v1/assets");
+  const { labelForAssetId } = useAssetLabel();
   const incidents = useLookup<Incident>("/api/v1/incidents");
 
   const [quotation, setQuotation] = useState<Quotation | null>(null);
@@ -56,10 +57,7 @@ export default function QuotationDetailPage() {
   }, [load]);
 
   const vendorName = (id: string) => vendors.find((v) => v.id === id)?.name ?? id;
-  const assetLabel = (id: string) => {
-    const a = assets.find((x) => x.id === id);
-    return a ? a.asset_number ?? a.serial_number ?? a.id : id;
-  };
+  const assetLabel = (id: string) => labelForAssetId(id);
   const incidentLabel = (id: string) => incidents.find((i) => i.id === id)?.description ?? id;
 
   const isCreator = !!quotation && !!user && quotation.created_by === user.id;

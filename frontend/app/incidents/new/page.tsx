@@ -147,7 +147,7 @@ export default function NewIncidentPage() {
               <option value="">Not linked to a specific device</option>
               {assetsForBranch.map((a) => {
                 const modelName = deviceModels.find((m) => m.id === a.device_model_id)?.name;
-                const tag = a.asset_number ?? a.serial_number ?? a.id;
+                const tag = a.asset_number ?? a.serial_number ?? "no ref";
                 return (
                   <option key={a.id} value={a.id}>
                     {modelName ? `${modelName} — ${tag}` : tag}

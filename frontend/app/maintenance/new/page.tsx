@@ -84,7 +84,7 @@ export default function NewPMSchedulePage() {
               </option>
               {assets.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.asset_number} — {modelName(a.device_model_id)}
+                  {modelName(a.device_model_id)} — {a.asset_number ?? a.serial_number ?? "no ref"}
                 </option>
               ))}
             </select>

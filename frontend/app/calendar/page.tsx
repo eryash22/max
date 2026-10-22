@@ -6,8 +6,9 @@ import { ProtectedShell } from "../../components/ProtectedShell";
 import { LoadingState } from "../../components/LoadingState";
 import { ErrorState } from "../../components/ErrorState";
 import { useLookup } from "../../hooks/useLookup";
+import { useAssetLabel } from "../../hooks/useAssetLabel";
 import { api, ApiError } from "../../lib/api";
-import type { Asset, CalendarEvent } from "../../types";
+import type { CalendarEvent } from "../../types";
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -75,8 +76,7 @@ export default function CalendarPage() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ date: string; events: CalendarEvent[] } | null>(null);
 
-  const assets = useLookup<Asset>("/api/v1/assets");
-  const assetById = useMemo(() => new Map(assets.map((a) => [a.id, a])), [assets]);
+  const { labelForAssetId } = useAssetLabel();
 
   const gridStart = useMemo(() => addDays(monthStart, -monthStart.getDay()), [monthStart]);
   const gridEnd = useMemo(() => addDays(gridStart, 41), [gridStart]);
@@ -142,7 +142,7 @@ export default function CalendarPage() {
 
   function assetLabel(assetId: string | null): string {
     if (!assetId) return "";
-    return assetById.get(assetId)?.asset_number ?? assetId;
+    return labelForAssetId(assetId);
   }
 
   return (

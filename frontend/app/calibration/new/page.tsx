@@ -111,7 +111,7 @@ export default function NewCalibrationSchedulePage() {
               </option>
               {filteredAssets.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {modelName(a.device_model_id)} — {a.asset_number ?? a.serial_number ?? a.id} — {branchName(a.branch_id)} ({a.status})
+                  {modelName(a.device_model_id)} — {a.asset_number ?? a.serial_number ?? "no ref"} — {branchName(a.branch_id)} ({a.status})
                 </option>
               ))}
             </select>

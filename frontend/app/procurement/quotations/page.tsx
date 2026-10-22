@@ -10,9 +10,10 @@ import { LoadingState } from "../../../components/LoadingState";
 import { ErrorState } from "../../../components/ErrorState";
 import { usePaginatedResource } from "../../../hooks/usePaginatedResource";
 import { useLookup } from "../../../hooks/useLookup";
+import { useAssetLabel } from "../../../hooks/useAssetLabel";
 import { useAuth } from "../../../hooks/useAuth";
 import { api, ApiError } from "../../../lib/api";
-import type { Asset, Incident, Quotation, Vendor } from "../../../types";
+import type { Incident, Quotation, Vendor } from "../../../types";
 
 interface LineRow {
   description: string;
@@ -31,7 +32,7 @@ export default function QuotationsPage() {
     statusFilter ? { status_filter: statusFilter } : {}
   );
   const incidents = useLookup<Incident>("/api/v1/incidents");
-  const assets = useLookup<Asset>("/api/v1/assets");
+  const { assets, labelForAsset } = useAssetLabel();
   const vendors = useLookup<Vendor>("/api/v1/vendors");
   const { hasPermission } = useAuth();
   const canCreate = hasPermission("quotation.create");
@@ -151,7 +152,7 @@ export default function QuotationsPage() {
                 <option value="">Select asset</option>
                 {assets.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.asset_number ?? a.serial_number ?? a.id}
+                    {labelForAsset(a)}
                   </option>
                 ))}
               </select>

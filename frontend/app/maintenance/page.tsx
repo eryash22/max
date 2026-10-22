@@ -223,7 +223,7 @@ export default function MaintenancePage() {
           <option value="">All assets</option>
           {assets.map((a) => (
             <option key={a.id} value={a.id}>
-              {a.asset_number}
+              {modelName(a.device_model_id)} — {a.asset_number ?? a.serial_number ?? "no ref"}
             </option>
           ))}
         </select>
@@ -254,7 +254,7 @@ export default function MaintenancePage() {
                 header: "Asset",
                 render: (s) => (
                   <Link href={`/maintenance/${s.id}`}>
-                    {assetById.get(s.asset_id)?.asset_number ?? s.asset_id}
+                    {assetById.get(s.asset_id)?.asset_number ?? assetById.get(s.asset_id)?.serial_number ?? "no ref"}
                   </Link>
                 ),
               },

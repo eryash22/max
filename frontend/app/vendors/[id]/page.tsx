@@ -749,7 +749,13 @@ export default function VendorDetailPage() {
             )}
             {visits.map((v) => (
               <tr key={v.id}>
-                <td>{assetById.get(v.asset_id)?.asset_number ?? v.asset_id}</td>
+                <td>
+                  {(() => {
+                    const a = assetById.get(v.asset_id);
+                    if (!a) return "Unknown device";
+                    return `${modelName(a.device_model_id)} — ${a.asset_number ?? a.serial_number ?? "no ref"}`;
+                  })()}
+                </td>
                 <td>{v.visit_date ?? "-"}</td>
                 <td>{v.visit_type ?? "-"}</td>
                 <td>{v.summary ?? "-"}</td>

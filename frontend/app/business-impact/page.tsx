@@ -9,9 +9,9 @@ import { LoadingState } from "../../components/LoadingState";
 import { ErrorState } from "../../components/ErrorState";
 import { useAuth } from "../../hooks/useAuth";
 import { useLookup } from "../../hooks/useLookup";
+import { useAssetLabel } from "../../hooks/useAssetLabel";
 import { api, ApiError } from "../../lib/api";
 import type {
-  Asset,
   BusinessImpactAssumption,
   FailureSummary,
   Incident,
@@ -27,8 +27,7 @@ export default function BusinessImpactPage() {
   const canRead = hasPermission("business_impact.read");
   const canWrite = hasPermission("hospital.write");
 
-  const assets = useLookup<Asset>("/api/v1/assets");
-  const assetNumber = (id: string) => assets.find((a) => a.id === id)?.asset_number ?? id;
+  const { labelForAssetId: assetNumber } = useAssetLabel();
   const incidents = useLookup<Incident>("/api/v1/incidents");
 
   const [assumptions, setAssumptions] = useState<BusinessImpactAssumption[]>([]);

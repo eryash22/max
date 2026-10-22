@@ -169,7 +169,7 @@ export default function PMScheduleDetailPage() {
     <ProtectedShell>
       <div className="page-header">
         <div>
-          <h1>{asset?.asset_number ?? schedule.asset_id}</h1>
+          <h1>{asset ? modelName(asset.device_model_id) : "Unknown device"}</h1>
           <p>
             <StatusBadge value={schedule.due_status} />
             {schedule.frequency ? ` · ${schedule.frequency.replace(/_/g, " ")}` : " · No frequency set"}
@@ -191,7 +191,11 @@ export default function PMScheduleDetailPage() {
           <tbody>
             <tr>
               <td>Asset</td>
-              <td>{asset ? `${asset.asset_number} (${modelName(asset.device_model_id)})` : schedule.asset_id}</td>
+              <td>
+                {asset
+                  ? `${modelName(asset.device_model_id)} (${asset.asset_number ?? asset.serial_number ?? "no ref"})`
+                  : "Unknown device"}
+              </td>
             </tr>
             <tr>
               <td>Serial number</td>

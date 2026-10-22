@@ -35,7 +35,11 @@ export default function ServiceVisitsPage() {
   // fetched by assets/page.tsx and inventory/page.tsx for the identical purpose.
   const contracts = useLookup<Contract>("/api/v1/contracts");
   const branches = useLookup<Branch>("/api/v1/branches");
-  const assetNumber = (id: string) => assets.find((a) => a.id === id)?.asset_number ?? id;
+  const assetNumber = (id: string) => {
+    const a = assets.find((x) => x.id === id);
+    if (!a) return "Unknown device";
+    return `${modelName(a.device_model_id)} — ${a.asset_number ?? a.serial_number ?? "no ref"}`;
+  };
   const visitBranchLabel = (assetId: string) => locationLabel(assets.find((a) => a.id === assetId)?.branch_id, branches);
   const vendorName = (id: string | null) => (id ? vendors.find((v) => v.id === id)?.name ?? id : "—");
 
@@ -225,7 +229,7 @@ export default function ServiceVisitsPage() {
                 </option>
                 {assets.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {modelName(a.device_model_id)} — {a.asset_number}
+                    {modelName(a.device_model_id)} — {a.asset_number ?? a.serial_number ?? "no ref"}
                   </option>
                 ))}
               </select>
@@ -329,7 +333,7 @@ export default function ServiceVisitsPage() {
           <option value="">All assets</option>
           {assets.map((a) => (
             <option key={a.id} value={a.id}>
-              {a.asset_number}
+              {modelName(a.device_model_id)} — {a.asset_number ?? a.serial_number ?? "no ref"}
             </option>
           ))}
         </select>

@@ -11,9 +11,10 @@ import { LoadingState } from "../../components/LoadingState";
 import { ErrorState } from "../../components/ErrorState";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useLookup } from "../../hooks/useLookup";
+import { useAssetLabel } from "../../hooks/useAssetLabel";
 import { useAuth } from "../../hooks/useAuth";
 import { api, ApiError } from "../../lib/api";
-import type { Asset, Contract, Page, Vendor } from "../../types";
+import type { Contract, Page, Vendor } from "../../types";
 import { CONTRACT_EXPIRY_STATUSES, CONTRACT_TYPES } from "../../types";
 
 const PAGE_SIZE = 25;
@@ -71,9 +72,8 @@ export default function ContractsPage() {
   }, []);
 
   const vendors = useLookup<Vendor>("/api/v1/vendors");
-  const assets = useLookup<Asset>("/api/v1/assets");
   const vendorById = useMemo(() => new Map(vendors.map((v) => [v.id, v])), [vendors]);
-  const assetById = useMemo(() => new Map(assets.map((a) => [a.id, a])), [assets]);
+  const { assets, labelForAssetId } = useAssetLabel();
 
   useEffect(() => {
     let cancelled = false;
@@ -204,7 +204,7 @@ export default function ContractsPage() {
           <option value="">All assets</option>
           {assets.map((a) => (
             <option key={a.id} value={a.id}>
-              {a.asset_number}
+              {labelForAssetId(a.id)}
             </option>
           ))}
         </select>
@@ -251,7 +251,7 @@ export default function ContractsPage() {
                 render: (c) =>
                   c.asset_ids.length === 0
                     ? "-"
-                    : c.asset_ids.map((id) => assetById.get(id)?.asset_number ?? id).join(", "),
+                    : c.asset_ids.map((id) => labelForAssetId(id)).join(", "),
               },
               { key: "start_date", header: "Start", render: (c) => c.start_date ?? "-" },
               { key: "end_date", header: "End", render: (c) => c.end_date ?? "-" },

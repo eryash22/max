@@ -10,14 +10,15 @@ import { StatusBadge } from "../../../../components/StatusBadge";
 import { ConfirmDialog } from "../../../../components/ConfirmDialog";
 import { useAuth } from "../../../../hooks/useAuth";
 import { useLookup } from "../../../../hooks/useLookup";
+import { useAssetLabel } from "../../../../hooks/useAssetLabel";
 import { api, ApiError } from "../../../../lib/api";
-import type { Asset, Incident, Invoice, Vendor } from "../../../../types";
+import type { Incident, Invoice, Vendor } from "../../../../types";
 
 export default function InvoiceDetailPage() {
   const params = useParams<{ id: string }>();
   const { hasPermission } = useAuth();
   const vendors = useLookup<Vendor>("/api/v1/vendors");
-  const assets = useLookup<Asset>("/api/v1/assets");
+  const { labelForAssetId } = useAssetLabel();
   const incidents = useLookup<Incident>("/api/v1/incidents");
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
@@ -42,10 +43,7 @@ export default function InvoiceDetailPage() {
   }, [load]);
 
   const vendorName = (id: string) => vendors.find((v) => v.id === id)?.name ?? id;
-  const assetLabel = (id: string) => {
-    const a = assets.find((x) => x.id === id);
-    return a ? a.asset_number ?? a.serial_number ?? a.id : id;
-  };
+  const assetLabel = (id: string) => labelForAssetId(id);
   const incidentLabel = (id: string) => incidents.find((i) => i.id === id)?.description ?? id;
 
   const canVerify = hasPermission("invoice.approve") && invoice?.verification_status === "PENDING";

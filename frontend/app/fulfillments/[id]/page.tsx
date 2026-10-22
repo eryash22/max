@@ -430,7 +430,9 @@ export default function FulfillmentDetailPage() {
                           return (
                             <span key={a.asset_id}>
                               {idx > 0 ? ", " : ""}
-                              <Link href={`/assets/${a.asset_id}`}>{asset?.asset_number ?? a.asset_id}</Link>
+                              <Link href={`/assets/${a.asset_id}`}>
+                                {asset?.asset_number ?? asset?.serial_number ?? "no ref"}
+                              </Link>
                             </span>
                           );
                         })}
@@ -447,7 +449,7 @@ export default function FulfillmentDetailPage() {
                                 checked={row?.asset_ids.includes(asset.id) ?? false}
                                 onChange={(e) => toggleAsset(item.requirement_item_id, asset.id, e.target.checked)}
                               />{" "}
-                              {asset.asset_number}
+                              {asset.asset_number ?? "no asset number"}
                               {asset.serial_number ? ` (${asset.serial_number})` : ""}
                             </label>
                           ))}

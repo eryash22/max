@@ -7,7 +7,7 @@ import { ErrorState } from "../../../components/ErrorState";
 import { useLookup } from "../../../hooks/useLookup";
 import { useAuth } from "../../../hooks/useAuth";
 import { api, ApiError } from "../../../lib/api";
-import type { Asset, DeviceModel, Document, Vendor } from "../../../types";
+import type { Asset, Branch, DeviceModel, Document, Vendor } from "../../../types";
 import { DOCUMENT_ACCESS_LEVELS, DOCUMENT_ENTITY_TYPES, DOCUMENT_TYPES } from "../../../types";
 
 export default function NewDocumentPage() {
@@ -15,8 +15,21 @@ export default function NewDocumentPage() {
   const { hasPermission } = useAuth();
   const models = useLookup<DeviceModel>("/api/v1/device-models");
   const assets = useLookup<Asset>("/api/v1/assets");
+  const branches = useLookup<Branch>("/api/v1/branches");
   // status_filter=ACTIVE — a deactivated vendor must not be selectable here.
   const vendors = useLookup<Vendor>("/api/v1/vendors?status_filter=ACTIVE");
+
+  // Most bulk-imported assets have no asset_number, so falling back to the raw
+  // UUID (as this dropdown used to) is unreadable — show the device model name
+  // and branch instead, same disambiguation the Incidents/Locations pages use.
+  const assetLabel = (a: Asset) => {
+    const model = models.find((m) => m.id === a.device_model_id);
+    const branch = branches.find((b) => b.id === a.branch_id);
+    const name = model?.name ?? "Unknown device";
+    const ref = a.asset_number ?? a.serial_number ?? null;
+    const parts = [name, branch?.name, ref].filter(Boolean);
+    return parts.join(" — ");
+  };
 
   const [entityType, setEntityType] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -125,7 +138,7 @@ export default function NewDocumentPage() {
               <option value="">None</option>
               {assets.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.asset_number ?? `(no asset number) ${a.id}`}
+                  {assetLabel(a)}
                 </option>
               ))}
             </select>

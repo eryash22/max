@@ -139,9 +139,10 @@ export default function RequirementDetailPage() {
     }
     if (item.asset_id) {
       const a = assets.find((x) => x.id === item.asset_id);
-      if (!a) return item.asset_id;
-      const tag = a.asset_number ?? a.serial_number ?? a.id;
-      return `${tag} (currently: ${a.status})`;
+      if (!a) return "Unknown device";
+      const model = deviceModels.find((m) => m.id === a.device_model_id);
+      const tag = a.asset_number ?? a.serial_number ?? "no ref";
+      return `${model?.name ?? "Unknown device"} — ${tag} (currently: ${a.status})`;
     }
     return "-";
   };

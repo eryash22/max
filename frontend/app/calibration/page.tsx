@@ -209,7 +209,7 @@ export default function CalibrationPage() {
           <option value="">All assets</option>
           {assets.map((a) => (
             <option key={a.id} value={a.id}>
-              {a.asset_number}
+              {modelName(a.device_model_id)} — {a.asset_number ?? a.serial_number ?? "no ref"}
             </option>
           ))}
         </select>
@@ -270,7 +270,7 @@ export default function CalibrationPage() {
                 header: "Asset",
                 render: (s) => (
                   <Link href={`/calibration/${s.id}`}>
-                    {assetById.get(s.asset_id)?.asset_number ?? s.asset_id}
+                    {assetById.get(s.asset_id)?.asset_number ?? assetById.get(s.asset_id)?.serial_number ?? "no ref"}
                   </Link>
                 ),
               },
@@ -310,7 +310,12 @@ export default function CalibrationPage() {
                 {
                   key: "asset",
                   header: "Asset",
-                  render: (r) => assetById.get(r.asset_id)?.asset_number ?? r.asset_id,
+                  render: (r) => {
+                    const asset = assetById.get(r.asset_id);
+                    if (!asset) return "-";
+                    const ref = asset.asset_number ?? asset.serial_number ?? "no ref";
+                    return `${modelName(asset.device_model_id)} — ${ref}`;
+                  },
                 },
                 { key: "performed_date", header: "Performed", render: (r) => r.performed_date ?? "-" },
                 { key: "pass_fail", header: "Result", render: (r) => (r.pass_fail ? <StatusBadge value={r.pass_fail} /> : "-") },
