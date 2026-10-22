@@ -398,7 +398,7 @@ export default function IncidentDetailPage() {
               </tr>
               <tr>
                 <td>PO cost (excl. GST)</td>
-                <td>{incident.po_cost_excl_gst != null ? `₹${incident.po_cost_excl_gst.toLocaleString("en-IN")}` : "-"}</td>
+                <td>{incident.po_cost_excl_gst != null ? `₹${incident.po_cost_excl_gst.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : "-"}</td>
               </tr>
               <tr>
                 <td>PO GST %</td>
@@ -406,13 +406,13 @@ export default function IncidentDetailPage() {
               </tr>
               <tr>
                 <td>PO amount (incl. GST)</td>
-                <td>{incident.po_amount != null ? `₹${incident.po_amount.toLocaleString("en-IN")}` : "-"}</td>
+                <td>{incident.po_amount != null ? `₹${incident.po_amount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : "-"}</td>
               </tr>
               <tr>
                 <td>Vendor estimate (excl. GST)</td>
                 <td>
                   {incident.vendor_estimate_cost_excl_gst != null
-                    ? `₹${incident.vendor_estimate_cost_excl_gst.toLocaleString("en-IN")}`
+                    ? `₹${incident.vendor_estimate_cost_excl_gst.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
                     : "-"}
                 </td>
               </tr>
@@ -420,7 +420,7 @@ export default function IncidentDetailPage() {
                 <td>Vendor estimate (incl. GST)</td>
                 <td>
                   {incident.vendor_estimate_cost_incl_gst != null
-                    ? `₹${incident.vendor_estimate_cost_incl_gst.toLocaleString("en-IN")}`
+                    ? `₹${incident.vendor_estimate_cost_incl_gst.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
                     : "-"}
                 </td>
               </tr>

@@ -280,17 +280,37 @@ def _branch_rows(db: Session, current_user: CurrentUser, *, can_incident: bool, 
         .group_by(Asset.branch_id)
         .all()
     )
-    operational = dict(
-        db.query(Asset.branch_id, func.count())
-        .filter(Asset.branch_id.in_(branch_ids), func.upper(Asset.status) == "OPERATIONAL")
-        .group_by(Asset.branch_id)
-        .all()
-    )
     incidents: dict = {}
     total_incidents: dict = {}
     to_be_condemned: dict = {}
     po_spend: dict = {}
+    assets_with_open_incident: dict = {}
+    raw_operational: dict = {}
+    if not can_incident:
+        # Fallback for a caller with no incident visibility — the best available
+        # signal is then the raw Asset.status flag, same as before this change.
+        raw_operational = dict(
+            db.query(Asset.branch_id, func.count())
+            .filter(Asset.branch_id.in_(branch_ids), func.upper(Asset.status) == "OPERATIONAL")
+            .group_by(Asset.branch_id)
+            .all()
+        )
     if can_incident:
+        # "Operational" below is NOT a raw Asset.status count — nothing in this app
+        # updates Asset.status when an incident is reported or resolved (that's a
+        # manual admin edit nobody does), so every bulk-imported asset is still
+        # literally "OPERATIONAL" in the assets table regardless of real incident
+        # state. Same reasoning as the Dashboard's "Total condemned" tile: incident
+        # status is the source of truth for a device's real condition, so a device
+        # with any still-open incident (OPEN/WORK_IN_PROGRESS/TO_BE_CONDEMNED)
+        # against it is excluded from "operational" here.
+        assets_with_open_incident = dict(
+            db.query(Asset.branch_id, func.count(func.distinct(Incident.asset_id)))
+            .join(Asset, Incident.asset_id == Asset.id)
+            .filter(Asset.branch_id.in_(branch_ids), Incident.status.in_(INCIDENT_OPEN_STATUSES))
+            .group_by(Asset.branch_id)
+            .all()
+        )
         incidents = dict(
             db.query(Incident.branch_id, func.count())
             .filter(Incident.branch_id.in_(branch_ids), Incident.status.in_(INCIDENT_OPEN_STATUSES))
@@ -334,7 +354,11 @@ def _branch_rows(db: Session, current_user: CurrentUser, *, can_incident: bool, 
             "status": b.status,
             "is_central_warehouse": bool(getattr(b, "is_central_warehouse", False)),
             "devices": assets.get(b.id, 0),
-            "operational": operational.get(b.id, 0),
+            "operational": (
+                max(assets.get(b.id, 0) - assets_with_open_incident.get(b.id, 0), 0)
+                if can_incident
+                else raw_operational.get(b.id, 0)
+            ),
             # None means "you may not see this column"; a real zero means "none in this
             # branch". Defaulting a missing GROUP BY key to 0 keeps those distinct — the
             # frontend renders None as an em dash.

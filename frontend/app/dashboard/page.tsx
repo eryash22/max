@@ -709,7 +709,7 @@ export default function DashboardPage() {
                   label: "PO spend (incl. GST)",
                   chartLabel: "PO spend (incl. GST) by branch",
                   gatedBy: "incident",
-                  format: (v) => `₹${v.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,
+                  format: (v) => `₹${v.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`,
                 },
               };
               const metricValue = (row: (typeof rows)[number]): number => {
@@ -795,7 +795,7 @@ export default function DashboardPage() {
                             {caps?.incident && (
                               <td className="dash-num">
                                 {row.po_spend_incl_gst != null
-                                  ? `₹${row.po_spend_incl_gst.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`
+                                  ? `₹${row.po_spend_incl_gst.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
                                   : "—"}
                               </td>
                             )}
@@ -934,7 +934,7 @@ function buildKpis(
   }
   if (summary.incidents) {
     const fmtInr = (n: number) =>
-      `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+      `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
     cards.push(
       <KpiCard
         key="po-spend-incl"

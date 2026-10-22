@@ -244,19 +244,19 @@ export default function IncidentsPage() {
               {
                 key: "po_cost_excl",
                 header: "PO Cost (excl. GST)",
-                render: (i) => (i.po_cost_excl_gst != null ? `₹${i.po_cost_excl_gst.toLocaleString("en-IN")}` : "-"),
+                render: (i) => (i.po_cost_excl_gst != null ? `₹${i.po_cost_excl_gst.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : "-"),
               },
               {
                 key: "po_amount",
                 header: "PO Amount (incl. GST)",
-                render: (i) => (i.po_amount != null ? `₹${i.po_amount.toLocaleString("en-IN")}` : "-"),
+                render: (i) => (i.po_amount != null ? `₹${i.po_amount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : "-"),
               },
               {
                 key: "vendor_estimate_excl",
                 header: "Vendor Estimate (excl. GST)",
                 render: (i) =>
                   i.vendor_estimate_cost_excl_gst != null
-                    ? `₹${i.vendor_estimate_cost_excl_gst.toLocaleString("en-IN")}`
+                    ? `₹${i.vendor_estimate_cost_excl_gst.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
                     : "-",
               },
               {
@@ -264,7 +264,7 @@ export default function IncidentsPage() {
                 header: "Vendor Estimate (incl. GST)",
                 render: (i) =>
                   i.vendor_estimate_cost_incl_gst != null
-                    ? `₹${i.vendor_estimate_cost_incl_gst.toLocaleString("en-IN")}`
+                    ? `₹${i.vendor_estimate_cost_incl_gst.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
                     : "-",
               },
               ...(canManage
