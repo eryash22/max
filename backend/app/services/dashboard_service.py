@@ -281,6 +281,8 @@ def _branch_rows(db: Session, current_user: CurrentUser, *, can_incident: bool, 
         .all()
     )
     incidents: dict = {}
+    open_only: dict = {}
+    work_in_progress: dict = {}
     total_incidents: dict = {}
     to_be_condemned: dict = {}
     po_spend: dict = {}
@@ -314,6 +316,23 @@ def _branch_rows(db: Session, current_user: CurrentUser, *, can_incident: bool, 
         incidents = dict(
             db.query(Incident.branch_id, func.count())
             .filter(Incident.branch_id.in_(branch_ids), Incident.status.in_(INCIDENT_OPEN_STATUSES))
+            .group_by(Incident.branch_id)
+            .all()
+        )
+        # Strict per-status counts — `incidents` above (open_incidents) is the sum of
+        # all three non-terminal statuses, which reads as ambiguous next to a
+        # "To be condemned" column that's actually a subset of it. These let the
+        # dashboard show OPEN and WORK_IN_PROGRESS as their own, non-overlapping
+        # figures instead of only the combined total.
+        open_only = dict(
+            db.query(Incident.branch_id, func.count())
+            .filter(Incident.branch_id.in_(branch_ids), Incident.status == "OPEN")
+            .group_by(Incident.branch_id)
+            .all()
+        )
+        work_in_progress = dict(
+            db.query(Incident.branch_id, func.count())
+            .filter(Incident.branch_id.in_(branch_ids), Incident.status == "WORK_IN_PROGRESS")
             .group_by(Incident.branch_id)
             .all()
         )
@@ -363,6 +382,8 @@ def _branch_rows(db: Session, current_user: CurrentUser, *, can_incident: bool, 
             # branch". Defaulting a missing GROUP BY key to 0 keeps those distinct — the
             # frontend renders None as an em dash.
             "open_incidents": incidents.get(b.id, 0) if can_incident else None,
+            "open_only": open_only.get(b.id, 0) if can_incident else None,
+            "work_in_progress": work_in_progress.get(b.id, 0) if can_incident else None,
             "total_incidents": total_incidents.get(b.id, 0) if can_incident else None,
             "to_be_condemned": to_be_condemned.get(b.id, 0) if can_incident else None,
             "po_spend_incl_gst": float(po_spend.get(b.id, 0)) if can_incident else None,

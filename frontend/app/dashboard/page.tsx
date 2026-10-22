@@ -137,7 +137,12 @@ export default function DashboardPage() {
   // devices-only; this lets it switch between every per-branch number the
   // table already has (incidents reported, open, to-be-condemned, PO spend).
   const [branchMetric, setBranchMetric] = useState<
-    "devices" | "total_incidents" | "open_incidents" | "to_be_condemned" | "po_spend_incl_gst"
+    | "devices"
+    | "total_incidents"
+    | "open_only"
+    | "work_in_progress"
+    | "to_be_condemned"
+    | "po_spend_incl_gst"
   >("devices");
 
   const load = useCallback(
@@ -693,9 +698,15 @@ export default function DashboardPage() {
                   gatedBy: "incident",
                   format: (v) => String(v),
                 },
-                open_incidents: {
-                  label: "Open incidents",
+                open_only: {
+                  label: "Open",
                   chartLabel: "Open incidents by branch",
+                  gatedBy: "incident",
+                  format: (v) => String(v),
+                },
+                work_in_progress: {
+                  label: "Work in progress",
+                  chartLabel: "Work-in-progress incidents by branch",
                   gatedBy: "incident",
                   format: (v) => String(v),
                 },
@@ -757,6 +768,7 @@ export default function DashboardPage() {
                         key: row.id,
                         label: row.name,
                         value: metricValue(row),
+                        displayValue: METRICS[branchMetric].format(metricValue(row)),
                         tone: row.is_central_warehouse ? "info" : "neutral",
                       }))}
                       selectedKey={branchFilter}
@@ -772,7 +784,8 @@ export default function DashboardPage() {
                           <th scope="col" className="dash-num">Devices</th>
                           <th scope="col" className="dash-num">Operational</th>
                           {caps?.incident && <th scope="col" className="dash-num">Incidents reported</th>}
-                          {caps?.incident && <th scope="col" className="dash-num">Open incidents</th>}
+                          {caps?.incident && <th scope="col" className="dash-num">Open</th>}
+                          {caps?.incident && <th scope="col" className="dash-num">Work in progress</th>}
                           {caps?.incident && <th scope="col" className="dash-num">To be condemned</th>}
                           {caps?.incident && <th scope="col" className="dash-num">PO spend (incl. GST)</th>}
                           {caps?.requirement && <th scope="col" className="dash-num">Pending requirements</th>}
@@ -790,7 +803,8 @@ export default function DashboardPage() {
                             <td className="dash-num">{row.devices}</td>
                             <td className="dash-num">{row.operational}</td>
                             {caps?.incident && <td className="dash-num">{row.total_incidents ?? "—"}</td>}
-                            {caps?.incident && <td className="dash-num">{row.open_incidents ?? "—"}</td>}
+                            {caps?.incident && <td className="dash-num">{row.open_only ?? "—"}</td>}
+                            {caps?.incident && <td className="dash-num">{row.work_in_progress ?? "—"}</td>}
                             {caps?.incident && <td className="dash-num">{row.to_be_condemned ?? "—"}</td>}
                             {caps?.incident && (
                               <td className="dash-num">

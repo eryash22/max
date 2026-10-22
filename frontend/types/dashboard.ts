@@ -110,6 +110,12 @@ export interface DashboardBranchRow {
   operational: number;
   /** null when the caller lacks the permission for that column. */
   open_incidents: number | null;
+  /** Strict single-status counts — open_incidents above is their sum plus
+   * to_be_condemned (all three non-terminal statuses), kept for backward
+   * compatibility; these let a chart/column show OPEN and WORK_IN_PROGRESS
+   * on their own without double-counting against to_be_condemned. */
+  open_only: number | null;
+  work_in_progress: number | null;
   total_incidents: number | null;
   to_be_condemned: number | null;
   po_spend_incl_gst: number | null;

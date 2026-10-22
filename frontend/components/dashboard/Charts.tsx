@@ -24,6 +24,10 @@ export interface Slice {
   label: string;
   value: number;
   tone: Tone;
+  /** Formatted text for the number shown next to the bar/segment (e.g. a
+   * rounded currency string). Falls back to the raw `value` when omitted —
+   * bar width/sorting always uses `value`, this only changes what's printed. */
+  displayValue?: string;
 }
 
 function toneVar(tone: Tone): string {
@@ -186,7 +190,7 @@ export function BarChart({
             <span className="bar__track">
               <span className="bar__fill" style={{ width, background: toneVar(slice.tone) }} />
             </span>
-            <span className="bar__value">{slice.value}</span>
+            <span className="bar__value">{slice.displayValue ?? slice.value}</span>
           </>
         );
         if (!onSelect) {
@@ -203,7 +207,7 @@ export function BarChart({
             className={`bar bar--action${selected ? " is-selected" : ""}`}
             onClick={() => onSelect(slice.key)}
             aria-pressed={selected}
-            title={`${slice.label}: ${slice.value}`}
+            title={`${slice.label}: ${slice.displayValue ?? slice.value}`}
           >
             {inner}
           </button>
