@@ -110,6 +110,9 @@ export interface DashboardBranchRow {
   operational: number;
   /** null when the caller lacks the permission for that column. */
   open_incidents: number | null;
+  total_incidents: number | null;
+  to_be_condemned: number | null;
+  po_spend_incl_gst: number | null;
   pending_requirements: number | null;
 }
 

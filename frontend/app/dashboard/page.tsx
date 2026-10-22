@@ -133,6 +133,13 @@ export default function DashboardPage() {
   const [periodYear, setPeriodYear] = useState<number>(now.getFullYear());
   const [periodMonth, setPeriodMonth] = useState<number>(now.getMonth() + 1);
 
+  // Which figure the Branches bar chart plots — the chart used to be
+  // devices-only; this lets it switch between every per-branch number the
+  // table already has (incidents reported, open, to-be-condemned, PO spend).
+  const [branchMetric, setBranchMetric] = useState<
+    "devices" | "total_incidents" | "open_incidents" | "to_be_condemned" | "po_spend_incl_gst"
+  >("devices");
+
   const load = useCallback(
     async (branchId: string | null, mode: "overall" | "year" | "month", year: number, month: number) => {
       setLoading(true);
@@ -674,6 +681,42 @@ export default function DashboardPage() {
               // would be nonsense, so it is framed as branch context instead.
               const isSingle = summary.scope === "BRANCH";
               const rows = summary.branches;
+
+              const METRICS: Record<
+                typeof branchMetric,
+                { label: string; chartLabel: string; gatedBy?: "incident"; format: (v: number) => string }
+              > = {
+                devices: { label: "Devices", chartLabel: "Devices by branch", format: (v) => String(v) },
+                total_incidents: {
+                  label: "Incidents reported",
+                  chartLabel: "Incidents reported by branch",
+                  gatedBy: "incident",
+                  format: (v) => String(v),
+                },
+                open_incidents: {
+                  label: "Open incidents",
+                  chartLabel: "Open incidents by branch",
+                  gatedBy: "incident",
+                  format: (v) => String(v),
+                },
+                to_be_condemned: {
+                  label: "To be condemned",
+                  chartLabel: "To-be-condemned incidents by branch",
+                  gatedBy: "incident",
+                  format: (v) => String(v),
+                },
+                po_spend_incl_gst: {
+                  label: "PO spend (incl. GST)",
+                  chartLabel: "PO spend (incl. GST) by branch",
+                  gatedBy: "incident",
+                  format: (v) => `₹${v.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,
+                },
+              };
+              const metricValue = (row: (typeof rows)[number]): number => {
+                const v = row[branchMetric];
+                return typeof v === "number" ? v : 0;
+              };
+
               return (
                 <Panel
                   key="branches"
@@ -681,15 +724,31 @@ export default function DashboardPage() {
                   hint={
                     isSingle
                       ? undefined
-                      : "Select a branch to filter this dashboard to it."
+                      : "Select a branch to filter this dashboard to it. Switch the figure the chart plots below."
                   }
                   span="full"
                   action={
-                    branchFilter && !isSingle ? (
-                      <button type="button" className="dash-linkbtn" onClick={() => setBranchFilter(null)}>
-                        Show all branches
-                      </button>
-                    ) : undefined
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      {!isSingle && caps?.incident && (
+                        <select
+                          className="dash-period-filter__select"
+                          value={branchMetric}
+                          onChange={(e) => setBranchMetric(e.target.value as typeof branchMetric)}
+                          aria-label="Branch chart metric"
+                        >
+                          {(Object.keys(METRICS) as (typeof branchMetric)[]).map((key) => (
+                            <option key={key} value={key}>
+                              {METRICS[key].label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      {branchFilter && !isSingle && (
+                        <button type="button" className="dash-linkbtn" onClick={() => setBranchFilter(null)}>
+                          Show all branches
+                        </button>
+                      )}
+                    </div>
                   }
                 >
                   {!isSingle && (
@@ -697,11 +756,11 @@ export default function DashboardPage() {
                       slices={rows.map((row) => ({
                         key: row.id,
                         label: row.name,
-                        value: row.devices,
+                        value: metricValue(row),
                         tone: row.is_central_warehouse ? "info" : "neutral",
                       }))}
                       selectedKey={branchFilter}
-                      valueLabel="Devices by branch"
+                      valueLabel={METRICS[branchMetric].chartLabel}
                       onSelect={(key) => setBranchFilter(key === branchFilter ? null : key)}
                     />
                   )}
@@ -712,7 +771,10 @@ export default function DashboardPage() {
                           <th scope="col">Branch</th>
                           <th scope="col" className="dash-num">Devices</th>
                           <th scope="col" className="dash-num">Operational</th>
+                          {caps?.incident && <th scope="col" className="dash-num">Incidents reported</th>}
                           {caps?.incident && <th scope="col" className="dash-num">Open incidents</th>}
+                          {caps?.incident && <th scope="col" className="dash-num">To be condemned</th>}
+                          {caps?.incident && <th scope="col" className="dash-num">PO spend (incl. GST)</th>}
                           {caps?.requirement && <th scope="col" className="dash-num">Pending requirements</th>}
                         </tr>
                       </thead>
@@ -727,7 +789,16 @@ export default function DashboardPage() {
                             </td>
                             <td className="dash-num">{row.devices}</td>
                             <td className="dash-num">{row.operational}</td>
+                            {caps?.incident && <td className="dash-num">{row.total_incidents ?? "—"}</td>}
                             {caps?.incident && <td className="dash-num">{row.open_incidents ?? "—"}</td>}
+                            {caps?.incident && <td className="dash-num">{row.to_be_condemned ?? "—"}</td>}
+                            {caps?.incident && (
+                              <td className="dash-num">
+                                {row.po_spend_incl_gst != null
+                                  ? `₹${row.po_spend_incl_gst.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`
+                                  : "—"}
+                              </td>
+                            )}
                             {caps?.requirement && (
                               <td className="dash-num">{row.pending_requirements ?? "—"}</td>
                             )}

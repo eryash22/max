@@ -287,10 +287,31 @@ def _branch_rows(db: Session, current_user: CurrentUser, *, can_incident: bool, 
         .all()
     )
     incidents: dict = {}
+    total_incidents: dict = {}
+    to_be_condemned: dict = {}
+    po_spend: dict = {}
     if can_incident:
         incidents = dict(
             db.query(Incident.branch_id, func.count())
             .filter(Incident.branch_id.in_(branch_ids), Incident.status.in_(INCIDENT_OPEN_STATUSES))
+            .group_by(Incident.branch_id)
+            .all()
+        )
+        total_incidents = dict(
+            db.query(Incident.branch_id, func.count())
+            .filter(Incident.branch_id.in_(branch_ids))
+            .group_by(Incident.branch_id)
+            .all()
+        )
+        to_be_condemned = dict(
+            db.query(Incident.branch_id, func.count())
+            .filter(Incident.branch_id.in_(branch_ids), Incident.status == "TO_BE_CONDEMNED")
+            .group_by(Incident.branch_id)
+            .all()
+        )
+        po_spend = dict(
+            db.query(Incident.branch_id, func.coalesce(func.sum(Incident.po_amount), 0))
+            .filter(Incident.branch_id.in_(branch_ids))
             .group_by(Incident.branch_id)
             .all()
         )
@@ -318,6 +339,9 @@ def _branch_rows(db: Session, current_user: CurrentUser, *, can_incident: bool, 
             # branch". Defaulting a missing GROUP BY key to 0 keeps those distinct — the
             # frontend renders None as an em dash.
             "open_incidents": incidents.get(b.id, 0) if can_incident else None,
+            "total_incidents": total_incidents.get(b.id, 0) if can_incident else None,
+            "to_be_condemned": to_be_condemned.get(b.id, 0) if can_incident else None,
+            "po_spend_incl_gst": float(po_spend.get(b.id, 0)) if can_incident else None,
             "pending_requirements": requirements.get(b.id, 0) if can_requirement else None,
         }
         for b in branches
