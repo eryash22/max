@@ -276,6 +276,78 @@ textarea:disabled {
   min-width: 240px;
 }
 
+.multi-select {
+  position: relative;
+}
+
+.multi-select__button {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.multi-select__caret {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+.multi-select__panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 200px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.multi-select__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.multi-select__option:hover {
+  background: var(--color-table-row-hover);
+}
+
+.multi-select__clear {
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: none;
+  background: none;
+  color: var(--color-link);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  border-top: 1px solid var(--color-border);
+}
+
+.multi-select__clear:hover {
+  color: var(--color-link-hover);
+}
+
 .card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);

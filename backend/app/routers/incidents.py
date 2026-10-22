@@ -90,11 +90,16 @@ def list_incidents(
         "branch_id": branch_id, "department_id": department_id, "location_id": location_id,
         "severity": severity, "asset_id": asset_id, "assigned_engineer_id": assigned_engineer_id,
     }
-    if status_filter:
-        exact_filters["status"] = status_filter
     for field, value in exact_filters.items():
         if value is not None:
             query = query.filter(getattr(Incident, field) == value)
+    if status_filter:
+        # Comma-separated list of statuses — lets the Incidents list filter by
+        # several statuses at once (e.g. "OPEN,WORK_IN_PROGRESS") instead of only
+        # one; a single value still works exactly as before.
+        statuses = [s.strip() for s in status_filter.split(",") if s.strip()]
+        if statuses:
+            query = query.filter(Incident.status.in_(statuses))
 
     # Device name, branch and vendor aren't stored on Incident directly (Vendor via
     # the device model's primary/alternative mapping, same as

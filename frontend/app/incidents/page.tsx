@@ -10,6 +10,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { LoadingState } from "../../components/LoadingState";
 import { ErrorState } from "../../components/ErrorState";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { MultiSelect } from "../../components/MultiSelect";
 import { usePaginatedResource } from "../../hooks/usePaginatedResource";
 import { useLookup } from "../../hooks/useLookup";
 import { useAuth } from "../../hooks/useAuth";
@@ -32,7 +33,9 @@ function formatDate(iso: string): string {
 
 export default function IncidentsPage() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  // Multiple statuses can be selected at once (e.g. Open + Work in Progress) —
+  // joined into one comma-separated status_filter query param the backend splits.
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [severity, setSeverity] = useState("");
   const [branchId, setBranchId] = useState("");
   const [vendorId, setVendorId] = useState("");
@@ -50,14 +53,14 @@ export default function IncidentsPage() {
     const sev = params.get("severity");
     const vf = params.get("vendor_id");
     if (bf) setBranchId(bf);
-    if (sf) setStatusFilter(sf);
+    if (sf) setStatusFilter(sf.split(",").filter(Boolean));
     if (sev) setSeverity(sev);
     if (vf) setVendorId(vf);
   }, []);
 
   const query: Record<string, string> = {};
   if (search) query.search = search;
-  if (statusFilter) query.status_filter = statusFilter;
+  if (statusFilter.length > 0) query.status_filter = statusFilter.join(",");
   if (severity) query.severity = severity;
   if (branchId) query.branch_id = branchId;
   if (vendorId) query.vendor_id = vendorId;
@@ -155,14 +158,12 @@ export default function IncidentsPage() {
           onChange={setSearch}
           placeholder="Search device, branch, vendor, description, remark, CER/Indent/PO no..."
         />
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-          <option value="">All statuses</option>
-          {INCIDENT_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s.replace(/_/g, " ")}
-            </option>
-          ))}
-        </select>
+        <MultiSelect
+          label="Statuses"
+          options={INCIDENT_STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }))}
+          selected={statusFilter}
+          onChange={setStatusFilter}
+        />
         <select value={severity} onChange={(e) => setSeverity(e.target.value)}>
           <option value="">All severities</option>
           {INCIDENT_SEVERITIES.map((s) => (
