@@ -150,7 +150,7 @@ export default function RequirementsPage() {
           <option value="">All departments</option>
           {departments.map((d) => (
             <option key={d.id} value={d.id}>
-              {d.name}
+              {d.name} — {branchName(d.branch_id)}
             </option>
           ))}
         </select>

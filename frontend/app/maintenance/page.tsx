@@ -65,6 +65,7 @@ export default function MaintenancePage() {
   const branches = useLookup<Branch>("/api/v1/branches");
   const departments = useLookup<Department>("/api/v1/departments");
   const models = useLookup<DeviceModel>("/api/v1/device-models");
+  const branchNameFor = (id: string) => branches.find((b) => b.id === id)?.name ?? id;
 
   const assetById = useMemo(() => new Map(assets.map((a) => [a.id, a])), [assets]);
   const branchName = (id: string) => branches.find((b) => b.id === id)?.name ?? id;
@@ -214,7 +215,7 @@ export default function MaintenancePage() {
           <option value="">All departments</option>
           {departments.map((d) => (
             <option key={d.id} value={d.id}>
-              {d.name}
+              {d.name} — {branchNameFor(d.branch_id)}
             </option>
           ))}
         </select>

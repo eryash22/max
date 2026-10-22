@@ -356,7 +356,7 @@ function UsersPageContent() {
                                 <option value="">No department</option>
                                 {departments.map((d) => (
                                   <option key={d.id} value={d.id}>
-                                    {d.name}
+                                    {d.name} — {branchName(d.branch_id)}
                                   </option>
                                 ))}
                               </select>

@@ -11,12 +11,21 @@ import { usePaginatedResource } from "../../hooks/usePaginatedResource";
 import { useLookup } from "../../hooks/useLookup";
 import { useAuth } from "../../hooks/useAuth";
 import { api, ApiError } from "../../lib/api";
-import type { Department, Location } from "../../types";
+import type { Branch, Department, Location } from "../../types";
 
 export default function LocationsPage() {
   const { data, page, setPage, loading, error, reload } = usePaginatedResource<Location>("/api/v1/locations");
   const departments = useLookup<Department>("/api/v1/departments");
-  const departmentName = (id: string) => departments.find((d) => d.id === id)?.name ?? id;
+  const branches = useLookup<Branch>("/api/v1/branches");
+  const branchName = (id: string) => branches.find((b) => b.id === id)?.name ?? id;
+  // Department names are not globally unique — the same master (e.g.
+  // "Physiotherapy") is assigned once per branch, so a plain name list is
+  // ambiguous in a dropdown. Disambiguate with the branch name.
+  const departmentLabel = (d: Department) => `${d.name} — ${branchName(d.branch_id)}`;
+  const departmentName = (id: string) => {
+    const d = departments.find((d) => d.id === id);
+    return d ? departmentLabel(d) : id;
+  };
   const { hasPermission } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -67,7 +76,7 @@ export default function LocationsPage() {
                 </option>
                 {departments.map((d) => (
                   <option key={d.id} value={d.id}>
-                    {d.name}
+                    {departmentLabel(d)}
                   </option>
                 ))}
               </select>

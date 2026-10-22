@@ -45,6 +45,15 @@ export default function NewIncidentPage() {
     [assets, branchId]
   );
 
+  // Department names aren't globally unique — the same master (e.g.
+  // "Physiotherapy") is assigned once per branch, so the full unfiltered list
+  // renders as repeated identical-looking options. Scope it to the selected
+  // branch, same as assetsForBranch above.
+  const departmentsForBranch = useMemo(
+    () => (branchId ? departments.filter((d) => d.branch_id === branchId) : departments),
+    [departments, branchId]
+  );
+
   useEffect(() => {
     if (assetId && !assetsForBranch.some((a) => a.id === assetId)) {
       setAssetId("");
@@ -125,7 +134,7 @@ export default function NewIncidentPage() {
             <label>Department</label>
             <select name="department_id" defaultValue="">
               <option value="">Not specified</option>
-              {departments.map((d) => (
+              {departmentsForBranch.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
                 </option>
