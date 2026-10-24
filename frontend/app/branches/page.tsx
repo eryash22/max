@@ -238,7 +238,6 @@ export default function BranchesPage() {
                 header: "Inventory mapping",
                 render: (b) => <StatusBadge value={b.inventory_mapping_status} />,
               },
-              { key: "environment", header: "Environment", render: (b) => b.environment },
               ...(canWrite
                 ? [
                     {
