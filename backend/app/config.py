@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 60 * 8
     algorithm: str = "HS256"
 
+    # Login brute-force protection (security hotfix) — in-process sliding-window
+    # limiter, see services/rate_limiter.py. Both Render services run on the Free
+    # plan, which is a single instance with no horizontal scaling, so an in-memory
+    # counter is sufficient here; it would need a shared store (Redis etc.) if this
+    # app ever moved to a multi-instance deployment. Configurable rather than
+    # hard-coded so a branch behind one shared NAT'd office IP can be tuned up
+    # without a code change if 5/min proves too strict in practice.
+    login_rate_limit_per_minute: int = 5
+    login_rate_limit_window_seconds: int = 60
+
     # Module 17B — configurable SMTP/email provider. All optional/blank by default;
     # sending is refused with a clear error (not a silent no-op or fake success) when
     # smtp_host is unset. Never hard-code a manager/admin email anywhere — the actual

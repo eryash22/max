@@ -10,6 +10,7 @@ from app.database import Base, get_db
 from app.main import app
 from app.models.identity import Role, User, UserRole
 from app.security.password import hash_password
+from app.services.rate_limiter import reset_for_tests as reset_login_rate_limiter
 from app.services.seed_service import ensure_roles_and_permissions
 from app.services.service_visit_service import ensure_default_service_visit_types
 
@@ -49,6 +50,13 @@ def client(db_session, monkeypatch):
     """
     test_session_factory = sessionmaker(bind=db_session.get_bind(), autoflush=False, autocommit=False)
     monkeypatch.setattr(main, "SessionLocal", test_session_factory)
+    # The login rate limiter (services/rate_limiter.py) keeps its counters in a
+    # module-level dict so they survive across requests within one running
+    # process — exactly what makes it work in production, but it means the
+    # counters would otherwise leak between tests too (TestClient's default
+    # client IP is the same constant for every test), eventually tripping 429s
+    # on unrelated tests purely from cumulative login calls across the suite.
+    reset_login_rate_limiter()
 
     def override_get_db():
         try:

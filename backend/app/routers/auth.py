@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from ..audit.service import record as audit_record
@@ -8,14 +8,47 @@ from ..models.identity import User
 from ..schemas.auth import CurrentUser, LoginRequest, TokenResponse
 from ..schemas.user import UserContactUpdate, UserOut
 from ..services.auth_service import authenticate, issue_token
+from ..services.rate_limiter import RateLimitExceeded, check, record_failure
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
+def _client_ip(request: Request) -> str:
+    """Render terminates TLS and proxies every request through its own edge —
+    the one and only hop in front of this app — so the leftmost address in
+    X-Forwarded-For is the real client IP, not something an end user can forge
+    past Render's edge. Falls back to the raw socket peer for local/dev runs
+    where no proxy (and so no header) is present."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    ip_key = f"ip:{_client_ip(request)}"
+    # Keyed on the raw submitted email (lowercased), not a resolved user id —
+    # this limiter must not reveal whether an account exists, and has to work
+    # the same way whether or not the email turns out to be real.
+    identity_key = f"id:{payload.email.strip().lower()}"
+    try:
+        check([ip_key, identity_key])
+    except RateLimitExceeded as exc:
+        # HTTPException's own `headers=` is what FastAPI's exception handler
+        # actually sends — mutating the injected `response` object has no effect
+        # once a raised exception replaces the normal return path.
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts. Please try again shortly.",
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
+
     user = authenticate(db, payload.email, payload.password)
     if user is None:
+        # Only a failed attempt counts toward the limit — a successful login
+        # (however many are made) is never throttled.
+        record_failure([ip_key, identity_key])
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     audit_record(db, user_id=user.id, action="LOGIN", entity="user", entity_id=user.id)
     db.commit()
