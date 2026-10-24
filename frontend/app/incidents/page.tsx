@@ -11,6 +11,7 @@ import { LoadingState } from "../../components/LoadingState";
 import { ErrorState } from "../../components/ErrorState";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { MultiSelect } from "../../components/MultiSelect";
+import { ExportButtons } from "../../components/ExportButtons";
 import { usePaginatedResource } from "../../hooks/usePaginatedResource";
 import { useLookup } from "../../hooks/useLookup";
 import { useAuth } from "../../hooks/useAuth";
@@ -145,12 +146,26 @@ export default function IncidentsPage() {
           <h1>Incidents</h1>
           <p>Device breakdown / complaint reports. Doctors and staff see only what they reported.</p>
         </div>
-        {hasPermission("incident.create") && (
-          <Link href="/incidents/new" className="btn btn--primary">
-            Report incident
-          </Link>
-        )}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {hasPermission("import.create") && (
+            <Link href="/imports" className="btn btn--ghost">
+              Import
+            </Link>
+          )}
+          {hasPermission("incident.create") && (
+            <Link href="/incidents/new" className="btn btn--primary">
+              Report incident
+            </Link>
+          )}
+        </div>
       </div>
+
+      <ExportButtons
+        path="/api/v1/incidents/export"
+        filters={{ search, status_filter: statusFilter.join(","), severity, branch_id: branchId, vendor_id: vendorId }}
+        recordCount={data?.total ?? 0}
+        filenameStem="incidents_export"
+      />
 
       <div className="toolbar">
         <SearchBar

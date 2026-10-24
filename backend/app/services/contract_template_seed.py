@@ -27,6 +27,7 @@ from ..schemas.notification import (
     EVENT_CONTRACT_CREATED,
     EVENT_CONTRACT_EXPIRED,
     EVENT_CONTRACT_EXPIRING,
+    EVENT_CONTRACT_STATUS_CHANGED,
     EVENT_WARRANTY_RENEWED,
 )
 
@@ -72,6 +73,12 @@ _WA_ASSET_REMOVED = (
     "Device: {{device_name}}\n"
     "Asset No: {{asset_number}}\n"
     "Branch: {{branch_name}}"
+)
+_WA_STATUS_CHANGED = (
+    "{{contract_type}} {{contract_number}} status changed to {{status}}\n"
+    "Device: {{device_name}} ({{asset_number}})\n"
+    "Branch: {{branch_name}}\n"
+    "Vendor: {{vendor_name}}"
 )
 
 _EMAIL_BODY = (
@@ -140,6 +147,16 @@ _DEFAULT_RULES: list[tuple[str, str, str, str | None, str, str | None, str | Non
      "Device removed from {{contract_type}} {{contract_number}}", _EMAIL_BODY, "{{vendor_email}}", None),
     ("CONTRACT_ASSET_REMOVED_WA", "WHATSAPP", EVENT_CONTRACT_ASSET_REMOVED,
      None, _WA_ASSET_REMOVED, None, "{{vendor_phone}}"),
+
+    # Security/completeness pass — every other contract event family has a seeded
+    # default rule; CONTRACT_STATUS_CHANGED (dispatched by
+    # contract_service._dispatch_status_change) was the one missing, so a status
+    # change silently notified nobody (dispatch_contract_event_safe finds zero rules
+    # and no-ops) rather than erroring, which made the gap easy to miss.
+    ("CONTRACT_STATUS_CHANGED_EMAIL", "EMAIL", EVENT_CONTRACT_STATUS_CHANGED,
+     "{{contract_type}} {{contract_number}} status changed to {{status}}", _EMAIL_BODY, "{{vendor_email}}", None),
+    ("CONTRACT_STATUS_CHANGED_WA", "WHATSAPP", EVENT_CONTRACT_STATUS_CHANGED,
+     None, _WA_STATUS_CHANGED, None, "{{vendor_phone}}"),
 ]
 
 

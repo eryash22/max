@@ -224,6 +224,38 @@ def test_status_change_fires_its_own_event(admin_client, db_session):
     assert len(_notifications(db_session, EVENT_CONTRACT_STATUS_CHANGED)) == 1
 
 
+def test_seeded_default_status_changed_template_actually_dispatches(admin_client, db_session):
+    """Security/completeness regression guard: before this fix, CONTRACT_STATUS_CHANGED
+    had no seeded default rule at all (every other contract event family did), so
+    dispatch_contract_event_safe found zero rules and silently no-op'd — confirmed
+    directly here by seeding the real defaults (not the test-only `_rule` helper) and
+    proving a status change actually produces a Notification once the seeded rule is
+    enabled, exactly as an admin would do from the Communication Rules screen."""
+    seeded = admin_client.post("/api/v1/notifications/templates/seed-defaults")
+    assert seeded.status_code == 200, seeded.text
+
+    rule = db_session.query(NotificationTemplate).filter(
+        NotificationTemplate.code == "CONTRACT_STATUS_CHANGED_WA"
+    ).first()
+    assert rule is not None, "CONTRACT_STATUS_CHANGED_WA must exist after seeding"
+    assert rule.is_active is False, "seeded rules ship disabled"
+    rule.is_active = True
+    db_session.commit()
+
+    branch = _branch(admin_client, "Comms Status Seeded")
+    model = _model(admin_client)
+    asset = _asset(admin_client, model["id"], branch["id"], "COMM-ST-SEEDED-1")
+    vendor = _vendor(admin_client)
+    contract = _contract(admin_client, vendor["id"], [asset["id"]])
+
+    r = admin_client.post(f"/api/v1/contracts/{contract['id']}/deactivate")
+    assert r.status_code == 200, r.text
+
+    rows = _notifications(db_session, EVENT_CONTRACT_STATUS_CHANGED)
+    assert len(rows) == 1, "the seeded default template must actually dispatch, not just exist"
+    assert "CANCELLED" in rows[0].rendered_body
+
+
 # ---- covered asset add / remove ----
 
 def test_adding_a_covered_asset_fires_and_names_only_that_asset(admin_client, db_session):

@@ -19,8 +19,10 @@ from ..schemas.common import Page
 from ..schemas.vendor import (
     DeviceModelVendorIn,
     DeviceModelVendorOut,
+    DeviceModelVendorUpdateIn,
     VendorContactIn,
     VendorContactOut,
+    VendorContactUpdateIn,
     VendorIn,
     VendorOut,
     VendorServiceVisitOut,
@@ -116,13 +118,13 @@ def export_vendors(
     headers = [
         "Vendor Name", "Vendor Type", "OEM", "Authorized Distributor", "Service Vendor",
         "City", "State", "Email", "Phone", "Website", "Support Coverage", "SLA Response Hours",
-        "Rating", "Status",
+        "Status",
     ]
     rows = [
         [v.name, v.vendor_type, v.is_oem, v.is_authorized_distributor, v.is_service_vendor,
          v.city, v.state, v.email if has_full_read else None, v.phone if has_full_read else None,
          v.website, v.support_coverage, v.response_sla_hours,
-         v.rating, v.status]
+         v.status]
         for v in items
     ]
 
@@ -336,6 +338,42 @@ def create_vendor_contact(vendor_id: str, payload: VendorContactIn, db: Session 
     return contact
 
 
+def _get_vendor_contact_or_404(db: Session, vendor_id: str, contact_id: str) -> VendorContact:
+    contact = db.get(VendorContact, contact_id)
+    if contact is None or contact.vendor_id != vendor_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor contact not found")
+    return contact
+
+
+@router.patch("/{vendor_id}/contacts/{contact_id}", response_model=VendorContactOut)
+def update_vendor_contact(vendor_id: str, contact_id: str, payload: VendorContactUpdateIn,
+                           db: Session = Depends(get_db),
+                           current_user: CurrentUser = Depends(require_permission(VENDOR_WRITE))):
+    contact = _get_vendor_contact_or_404(db, vendor_id, contact_id)
+    before = VendorContactOut.model_validate(contact).model_dump()
+    updates = payload.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(contact, field, value)
+    db.flush()
+    audit_record(db, user_id=current_user.id, action="UPDATE", entity="vendor_contact", entity_id=contact.id,
+                 old_value=before, new_value=updates)
+    db.commit()
+    db.refresh(contact)
+    return contact
+
+
+@router.delete("/{vendor_id}/contacts/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_vendor_contact(vendor_id: str, contact_id: str, db: Session = Depends(get_db),
+                           current_user: CurrentUser = Depends(require_permission(VENDOR_WRITE))):
+    contact = _get_vendor_contact_or_404(db, vendor_id, contact_id)
+    before = VendorContactOut.model_validate(contact).model_dump()
+    db.delete(contact)
+    audit_record(db, user_id=current_user.id, action="DELETE", entity="vendor_contact", entity_id=contact_id,
+                 old_value=before)
+    db.commit()
+    return None
+
+
 # ---- Vendor <-> device model linkage ----
 
 @router.get("/{vendor_id}/device-models", response_model=list[DeviceModelVendorOut])
@@ -361,6 +399,42 @@ def link_vendor_device_model(vendor_id: str, payload: DeviceModelVendorIn, db: S
     db.commit()
     db.refresh(link)
     return link
+
+
+def _get_device_model_link_or_404(db: Session, vendor_id: str, link_id: str) -> DeviceModelVendor:
+    link = db.get(DeviceModelVendor, link_id)
+    if link is None or link.vendor_id != vendor_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device model link not found")
+    return link
+
+
+@router.patch("/{vendor_id}/device-models/{link_id}", response_model=DeviceModelVendorOut)
+def update_vendor_device_model(vendor_id: str, link_id: str, payload: DeviceModelVendorUpdateIn,
+                                db: Session = Depends(get_db),
+                                current_user: CurrentUser = Depends(require_permission(VENDOR_WRITE))):
+    link = _get_device_model_link_or_404(db, vendor_id, link_id)
+    before = DeviceModelVendorOut.model_validate(link).model_dump()
+    updates = payload.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(link, field, value)
+    db.flush()
+    audit_record(db, user_id=current_user.id, action="UPDATE", entity="device_model_vendor", entity_id=link.id,
+                 old_value=before, new_value=updates)
+    db.commit()
+    db.refresh(link)
+    return link
+
+
+@router.delete("/{vendor_id}/device-models/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_vendor_device_model(vendor_id: str, link_id: str, db: Session = Depends(get_db),
+                                current_user: CurrentUser = Depends(require_permission(VENDOR_WRITE))):
+    link = _get_device_model_link_or_404(db, vendor_id, link_id)
+    before = DeviceModelVendorOut.model_validate(link).model_dump()
+    db.delete(link)
+    audit_record(db, user_id=current_user.id, action="DELETE", entity="device_model_vendor", entity_id=link_id,
+                 old_value=before)
+    db.commit()
+    return None
 
 
 # ---- Vendor service visit history (read-only) ----

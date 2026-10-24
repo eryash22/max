@@ -50,6 +50,8 @@ export default function VendorDetailPage() {
   const [deleteConflict, setDeleteConflict] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
+  const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
 
   const [visits, setVisits] = useState<VendorServiceVisit[]>([]);
   const [visitsTotal, setVisitsTotal] = useState(0);
@@ -153,7 +155,6 @@ export default function VendorDetailPage() {
         website: formData.get("website") || null,
         support_coverage: formData.get("support_coverage") || null,
         response_sla_hours: formData.get("response_sla_hours") ? Number(formData.get("response_sla_hours")) : null,
-        rating: formData.get("rating") ? Number(formData.get("rating")) : null,
       });
       await load();
     } catch (err) {
@@ -232,13 +233,80 @@ export default function VendorDetailPage() {
     try {
       await api.post(`/api/v1/vendors/${params.id}/device-models`, {
         device_model_id: formData.get("device_model_id"),
-        rank: formData.get("rank") ? Number(formData.get("rank")) : 0,
         notes: formData.get("notes") || null,
       });
       form.reset();
       await load();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : "Failed to link device model.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUpdateContact(event: FormEvent<HTMLFormElement>, contactId: string) {
+    event.preventDefault();
+    setActionError(null);
+    setBusy(true);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    try {
+      await api.patch(`/api/v1/vendors/${params.id}/contacts/${contactId}`, {
+        name: formData.get("name"),
+        role: formData.get("role") || null,
+        email: formData.get("email") || null,
+        phone: formData.get("phone") || null,
+        is_primary: formData.get("is_primary") === "on",
+      });
+      setEditingContactId(null);
+      await load();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Failed to update contact.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteContact(contactId: string) {
+    setActionError(null);
+    setBusy(true);
+    try {
+      await api.delete(`/api/v1/vendors/${params.id}/contacts/${contactId}`);
+      await load();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Failed to delete contact.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUpdateDeviceModelLink(event: FormEvent<HTMLFormElement>, linkId: string) {
+    event.preventDefault();
+    setActionError(null);
+    setBusy(true);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    try {
+      await api.patch(`/api/v1/vendors/${params.id}/device-models/${linkId}`, {
+        notes: formData.get("notes") || null,
+      });
+      setEditingLinkId(null);
+      await load();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Failed to update device model link.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleUnlinkDeviceModel(linkId: string) {
+    setActionError(null);
+    setBusy(true);
+    try {
+      await api.delete(`/api/v1/vendors/${params.id}/device-models/${linkId}`);
+      await load();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : "Failed to unlink device model.");
     } finally {
       setBusy(false);
     }
@@ -270,7 +338,6 @@ export default function VendorDetailPage() {
           <p>
             <StatusBadge value={vendor.status} />
             {vendor.vendor_type ? ` · ${vendor.vendor_type}` : ""}
-            {vendor.rating ? ` · Rating ${vendor.rating}/5` : ""}
           </p>
         </div>
         {canWrite && (
@@ -342,10 +409,6 @@ export default function VendorDetailPage() {
             <tr>
               <td>Response SLA</td>
               <td>{vendor.response_sla_hours ? `${vendor.response_sla_hours} hours` : "-"}</td>
-            </tr>
-            <tr>
-              <td>Rating</td>
-              <td>{vendor.rating ? `${vendor.rating} / 5` : "-"}</td>
             </tr>
             <tr>
               <td>Status</td>
@@ -420,10 +483,6 @@ export default function VendorDetailPage() {
               <label>Response SLA (hours)</label>
               <input name="response_sla_hours" type="number" min={1} defaultValue={vendor.response_sla_hours ?? ""} />
             </div>
-            <div className="form-field">
-              <label>Rating (1-5)</label>
-              <input name="rating" type="number" min={1} max={5} defaultValue={vendor.rating ?? ""} />
-            </div>
             <div className="form-field" style={{ justifyContent: "flex-end" }}>
               <button className="btn btn--primary" type="submit" disabled={busy}>
                 Save changes
@@ -443,23 +502,78 @@ export default function VendorDetailPage() {
               <th>Email</th>
               <th>Phone</th>
               <th>Primary</th>
+              {canWrite && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {contacts.length === 0 && (
               <tr>
-                <td colSpan={5}>No contacts yet.</td>
+                <td colSpan={canWrite ? 6 : 5}>No contacts yet.</td>
               </tr>
             )}
-            {contacts.map((c) => (
-              <tr key={c.id}>
-                <td>{c.name}</td>
-                <td>{c.role ?? "-"}</td>
-                <td>{c.email ?? "-"}</td>
-                <td>{c.phone ?? "-"}</td>
-                <td>{c.is_primary ? "Yes" : "No"}</td>
-              </tr>
-            ))}
+            {contacts.map((c) =>
+              editingContactId === c.id ? (
+                <tr key={c.id}>
+                  <td colSpan={canWrite ? 6 : 5}>
+                    <form
+                      onSubmit={(e) => handleUpdateContact(e, c.id)}
+                      className="form-grid"
+                      style={{ margin: 0 }}
+                    >
+                      <div className="form-field">
+                        <label>Name*</label>
+                        <input name="name" required defaultValue={c.name} />
+                      </div>
+                      <div className="form-field">
+                        <label>Role</label>
+                        <input name="role" defaultValue={c.role ?? ""} />
+                      </div>
+                      <div className="form-field">
+                        <label>Email</label>
+                        <input name="email" type="email" defaultValue={c.email ?? ""} />
+                      </div>
+                      <div className="form-field">
+                        <label>Phone</label>
+                        <input name="phone" defaultValue={c.phone ?? ""} />
+                      </div>
+                      <div className="form-field form-field--checkbox">
+                        <label>
+                          <input name="is_primary" type="checkbox" defaultChecked={c.is_primary} /> Primary contact
+                        </label>
+                      </div>
+                      <div className="form-field" style={{ justifyContent: "flex-end", gap: 8 }}>
+                        <button className="btn btn--ghost" type="button" onClick={() => setEditingContactId(null)}>
+                          Cancel
+                        </button>
+                        <button className="btn btn--primary" type="submit" disabled={busy}>
+                          Save
+                        </button>
+                      </div>
+                    </form>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={c.id}>
+                  <td>{c.name}</td>
+                  <td>{c.role ?? "-"}</td>
+                  <td>{c.email ?? "-"}</td>
+                  <td>{c.phone ?? "-"}</td>
+                  <td>{c.is_primary ? "Yes" : "No"}</td>
+                  {canWrite && (
+                    <td>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button className="btn btn--ghost" onClick={() => setEditingContactId(c.id)} disabled={busy}>
+                          Edit
+                        </button>
+                        <button className="btn btn--danger" onClick={() => handleDeleteContact(c.id)} disabled={busy}>
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              )
+            )}
           </tbody>
         </table>
 
@@ -501,23 +615,63 @@ export default function VendorDetailPage() {
           <thead>
             <tr>
               <th>Device model</th>
-              <th>Rank</th>
               <th>Notes</th>
+              {canWrite && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {deviceModels.length === 0 && (
               <tr>
-                <td colSpan={3}>No device models linked yet.</td>
+                <td colSpan={canWrite ? 3 : 2}>No device models linked yet.</td>
               </tr>
             )}
-            {deviceModels.map((d) => (
-              <tr key={d.id}>
-                <td>{modelName(d.device_model_id)}</td>
-                <td>{d.rank === 0 ? "Primary" : `Alternative ${d.rank}`}</td>
-                <td>{d.notes ?? "-"}</td>
-              </tr>
-            ))}
+            {deviceModels.map((d) =>
+              editingLinkId === d.id ? (
+                <tr key={d.id}>
+                  <td colSpan={canWrite ? 3 : 2}>
+                    <form
+                      onSubmit={(e) => handleUpdateDeviceModelLink(e, d.id)}
+                      className="form-grid"
+                      style={{ margin: 0 }}
+                    >
+                      <div className="form-field">
+                        <label>Device model</label>
+                        <input value={modelName(d.device_model_id)} disabled />
+                      </div>
+                      <div className="form-field">
+                        <label>Notes</label>
+                        <input name="notes" defaultValue={d.notes ?? ""} />
+                      </div>
+                      <div className="form-field" style={{ justifyContent: "flex-end", gap: 8 }}>
+                        <button className="btn btn--ghost" type="button" onClick={() => setEditingLinkId(null)}>
+                          Cancel
+                        </button>
+                        <button className="btn btn--primary" type="submit" disabled={busy}>
+                          Save
+                        </button>
+                      </div>
+                    </form>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={d.id}>
+                  <td>{modelName(d.device_model_id)}</td>
+                  <td>{d.notes ?? "-"}</td>
+                  {canWrite && (
+                    <td>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button className="btn btn--ghost" onClick={() => setEditingLinkId(d.id)} disabled={busy}>
+                          Edit
+                        </button>
+                        <button className="btn btn--danger" onClick={() => handleUnlinkDeviceModel(d.id)} disabled={busy}>
+                          Unlink
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              )
+            )}
           </tbody>
         </table>
 
@@ -535,10 +689,6 @@ export default function VendorDetailPage() {
                   </option>
                 ))}
               </select>
-            </div>
-            <div className="form-field">
-              <label>Rank (0 = primary)</label>
-              <input name="rank" type="number" min={0} max={3} defaultValue={0} />
             </div>
             <div className="form-field">
               <label>Notes</label>
@@ -688,8 +838,7 @@ export default function VendorDetailPage() {
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }}>AMC / CMC / Warranty contracts</h3>
         <p style={{ marginTop: 0, color: "var(--color-text-muted)" }}>
-          Reuses the existing Contracts module (<code>GET /api/v1/contracts?vendor_id=</code>) — no contract data is
-          duplicated onto Vendor.
+          Contracts covering assets serviced by this vendor. Open a contract to edit its details.
         </p>
         <table className="data-table">
           <thead>
@@ -738,13 +887,12 @@ export default function VendorDetailPage() {
               <th>Summary</th>
               <th>Parts used</th>
               <th>Cost</th>
-              <th>Next action</th>
             </tr>
           </thead>
           <tbody>
             {visits.length === 0 && (
               <tr>
-                <td colSpan={7}>No service visits recorded for this vendor.</td>
+                <td colSpan={6}>No service visits recorded for this vendor.</td>
               </tr>
             )}
             {visits.map((v) => (
@@ -761,7 +909,6 @@ export default function VendorDetailPage() {
                 <td>{v.summary ?? "-"}</td>
                 <td>{v.parts_used ?? "-"}</td>
                 <td>{v.cost != null ? v.cost : "-"}</td>
-                <td>{v.next_action ?? "-"}</td>
               </tr>
             ))}
           </tbody>

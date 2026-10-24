@@ -1,5 +1,8 @@
+from dataclasses import dataclass, field as dc_field
+from datetime import datetime
 from pathlib import Path
 
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -14,7 +17,7 @@ from ..models.documents import Document
 from ..models.hospital import Branch, Department, DepartmentMaster, Location
 from ..models.identity import User
 from ..models.imports import ImportApproval, ImportError as ImportErrorModel, ImportJob, ImportRow
-from ..models.incident import ServiceVisit
+from ..models.incident import Incident, ServiceVisit
 from ..models.inventory import Consumable, InventoryItem, InventoryLocation
 from ..models.maintenance import CalibrationRecord, CalibrationSchedule, PMRecord, PMSchedule
 from ..models.review import ReviewItem
@@ -108,6 +111,9 @@ def create_job(db: Session, *, file_bytes: bytes, file_name: str, uploaded_by: s
                         "it will be stored as free text and won't link to the catalog taxonomy",
                         "WARNING",
                     ))
+
+            if config.entity_type == "incident" and not any(sev == "ERROR" for _, _, sev in issues):
+                issues.extend(_validate_incident_row(db, mapped))
 
             is_duplicate = bool(key) and key in seen_keys[config.entity_type]
             if key:
@@ -977,6 +983,236 @@ def _import_service_visit(db: Session, row: ImportRow, mapped: dict, context: di
     return obj.id, "INSERT"
 
 
+# ---- Incident history reconciliation ----
+#
+# The one entity type in this pipeline where "will this match an existing record"
+# has to be visible to the admin BEFORE they approve, not just decided at apply time
+# (every other handler above only resolves its match when approve_job() actually
+# calls it) — reconciling historical data against a workbook is exactly the
+# known-wrong-data-already-in-production case the rest of this pipeline was never
+# asked to handle. `_match_incident` is the single source of truth for that decision,
+# called twice: once read-only during create_job() validation (to annotate the
+# preview with INFO rows showing the proposed before/after), and once for real during
+# approve_job() (to actually write it) — never duplicated, just invoked at two points.
+
+_INCIDENT_STATUS_MAP = {
+    "closed": "OPERATIONAL",
+    "wip": "WORK_IN_PROGRESS",
+    "work in progress": "WORK_IN_PROGRESS",
+    "to be condemned": "TO_BE_CONDEMNED",
+    "open": "OPEN",
+}
+
+# Every Incident field this sheet can correct, beyond branch/description/status/date
+# (handled separately since each needs its own resolution/mapping logic).
+_INCIDENT_UPDATE_FIELDS = [
+    "cer_number", "indent_number", "po_number", "po_closure_date",
+    "po_cost_excl_gst", "po_gst_percent", "po_amount",
+    "vendor_estimate_cost_excl_gst", "vendor_estimate_gst_percent", "vendor_estimate_cost_incl_gst",
+]
+
+
+@dataclass
+class IncidentMatch:
+    tier: str  # "PO" | "CER" | "INDENT" | "DESCRIPTION" | "NEW" | "AMBIGUOUS"
+    incident: Incident | None = None
+    conflict_ids: list[str] = dc_field(default_factory=list)
+
+
+def _resolve_branch_id_by_name_ci(db: Session, name: object) -> str | None:
+    if not name:
+        return None
+    branch = db.query(Branch).filter(func.lower(Branch.name) == str(name).strip().lower()).first()
+    return branch.id if branch else None
+
+
+def _coerce_incident_date(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            return datetime.fromisoformat(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _match_incident(db: Session, branch_id: str | None, mapped: dict) -> IncidentMatch:
+    """Find the existing Incident (if any) a workbook row corresponds to.
+
+    Tiers, in priority order — each trusted only when it resolves to exactly one row:
+    1) PO number (exact)  2) CER number (exact)  3) Indent number (exact)
+    4) branch + description (exact text, case/whitespace as stored)
+    Two keys pointing at two DIFFERENT existing rows, or any key matching more than
+    one row, is AMBIGUOUS — never guessed, per the explicit instruction not to match
+    on approximate text or resolve conflicts automatically. No match at any tier
+    means this row is a new incident, not an update.
+    """
+    candidates: dict[str, Incident] = {}
+    for field_name, tier in (("po_number", "PO"), ("cer_number", "CER"), ("indent_number", "INDENT")):
+        value = mapped.get(field_name)
+        if not value:
+            continue
+        rows = db.query(Incident).filter(getattr(Incident, field_name) == value).all()
+        if len(rows) == 1:
+            candidates[tier] = rows[0]
+        elif len(rows) > 1:
+            return IncidentMatch(tier="AMBIGUOUS", conflict_ids=[r.id for r in rows])
+
+    distinct_ids = {inc.id for inc in candidates.values()}
+    if len(distinct_ids) > 1:
+        return IncidentMatch(tier="AMBIGUOUS", conflict_ids=sorted(distinct_ids))
+    if len(distinct_ids) == 1:
+        tier, incident = next(iter(candidates.items()))
+        return IncidentMatch(tier=tier, incident=incident)
+
+    description = mapped.get("description")
+    if branch_id and description:
+        rows = db.query(Incident).filter(
+            Incident.branch_id == branch_id, Incident.description == description,
+        ).all()
+        if len(rows) == 1:
+            return IncidentMatch(tier="DESCRIPTION", incident=rows[0])
+        if len(rows) > 1:
+            return IncidentMatch(tier="AMBIGUOUS", conflict_ids=[r.id for r in rows])
+
+    return IncidentMatch(tier="NEW")
+
+
+_INCIDENT_NUMERIC_FIELDS = {
+    "po_cost_excl_gst", "po_gst_percent", "po_amount",
+    "vendor_estimate_cost_excl_gst", "vendor_estimate_gst_percent", "vendor_estimate_cost_incl_gst",
+}
+
+
+def _incident_value_differs(field_name: str, old_value: object, new_value: object) -> bool:
+    """A plain str() comparison treats `0.0` (float, from the DB) and `0` (int, from
+    openpyxl) as different values when they're numerically identical — a false
+    "change" on every untouched cost/GST field. Numeric fields compare as floats;
+    everything else compares as text."""
+    if field_name in _INCIDENT_NUMERIC_FIELDS:
+        try:
+            return float(new_value) != float(old_value or 0)
+        except (TypeError, ValueError):
+            pass
+    return str(new_value) != (str(old_value) if old_value is not None else None)
+
+
+def _incident_field_diff(incident: Incident, mapped: dict) -> list[tuple[str, object, object]]:
+    """Every (label, old, new) where the workbook's value differs from the existing
+    row — drives both what gets written at approval and what the admin sees in the
+    preview beforehand."""
+    diffs: list[tuple[str, object, object]] = []
+    new_date = _coerce_incident_date(mapped.get("incident_date"))
+    if new_date is not None:
+        old_iso = incident.created_at.isoformat() if incident.created_at else None
+        if new_date.isoformat() != old_iso:
+            diffs.append(("created_at (the DATE column shown in the Incidents UI)", old_iso, new_date.isoformat()))
+    status_raw = mapped.get("status")
+    new_status = _INCIDENT_STATUS_MAP.get(str(status_raw).strip().lower()) if status_raw else None
+    if new_status and new_status != incident.status:
+        diffs.append(("status", incident.status, new_status))
+    for field_name in _INCIDENT_UPDATE_FIELDS:
+        new_value = mapped.get(field_name)
+        if new_value is None:
+            continue
+        old_value = getattr(incident, field_name)
+        if _incident_value_differs(field_name, old_value, new_value):
+            diffs.append((field_name, old_value, new_value))
+    return diffs
+
+
+def _validate_incident_row(db: Session, mapped: dict) -> list[tuple[str | None, str, str]]:
+    """Called from create_job()'s validation loop — read-only, writes nothing.
+    Returns ERROR issues for anything that must block the row (unresolved branch,
+    unrecognized status, ambiguous match, unparseable date), and INFO issues that
+    surface the proposed match/diff in the preview without blocking it."""
+    issues: list[tuple[str | None, str, str]] = []
+
+    branch_id = _resolve_branch_id_by_name_ci(db, mapped.get("branch_code"))
+    if branch_id is None:
+        issues.append(("branch_code", f"'{mapped.get('branch_code')}' does not match any existing branch", "ERROR"))
+        return issues
+
+    status_raw = mapped.get("status")
+    if status_raw and str(status_raw).strip().lower() not in _INCIDENT_STATUS_MAP:
+        issues.append(("status", f"Status '{status_raw}' not recognized (expected Open/WIP/Closed/To Be Condemned)", "ERROR"))
+        return issues
+
+    if mapped.get("incident_date") is not None and _coerce_incident_date(mapped.get("incident_date")) is None:
+        issues.append(("incident_date", f"Date value '{mapped.get('incident_date')}' could not be parsed", "ERROR"))
+        return issues
+
+    match = _match_incident(db, branch_id, mapped)
+    if match.tier == "AMBIGUOUS":
+        issues.append((
+            None,
+            f"Matches {len(match.conflict_ids)} existing incidents ambiguously "
+            f"({', '.join(match.conflict_ids)}) — needs manual resolution, will not be imported automatically",
+            "ERROR",
+        ))
+        return issues
+
+    if match.tier == "NEW":
+        issues.append((None, "No matching existing incident found — will be created as a new incident", "INFO"))
+    else:
+        diffs = _incident_field_diff(match.incident, mapped)
+        issues.append((
+            None,
+            f"Matched existing incident by {match.tier} ({match.incident.id}) — {len(diffs)} field(s) will change",
+            "INFO",
+        ))
+        for field_name, old, new in diffs:
+            issues.append((field_name, f"{old!r} -> {new!r}", "INFO"))
+    return issues
+
+
+def _import_incident(db: Session, row: ImportRow, mapped: dict, context: dict) -> tuple[str, str] | None:
+    branch_id = _resolve_branch_id_by_name_ci(db, mapped.get("branch_code"))
+    if branch_id is None:
+        db.add(ImportErrorModel(job_id=row.job_id, sheet_name=row.sheet_name, row_number=row.row_number,
+                                 field="branch_code", severity="ERROR",
+                                 message=f"'{mapped.get('branch_code')}' does not match any existing branch"))
+        return None
+
+    status_raw = mapped.get("status")
+    new_status = _INCIDENT_STATUS_MAP.get(str(status_raw).strip().lower()) if status_raw else None
+    new_date = _coerce_incident_date(mapped.get("incident_date"))
+
+    match = _match_incident(db, branch_id, mapped)
+    if match.tier == "AMBIGUOUS":
+        db.add(ImportErrorModel(job_id=row.job_id, sheet_name=row.sheet_name, row_number=row.row_number,
+                                 field=None, severity="ERROR",
+                                 message="Ambiguous match against existing incidents — not imported"))
+        return None
+
+    if match.tier == "NEW":
+        incident = Incident(
+            branch_id=branch_id, description=mapped.get("description"), status=new_status or "OPEN",
+            reported_by=None,
+        )
+        if new_date is not None:
+            incident.created_at = new_date
+        for field_name in _INCIDENT_UPDATE_FIELDS:
+            value = mapped.get(field_name)
+            if value is not None:
+                setattr(incident, field_name, value)
+        db.add(incident)
+        db.flush()
+        return incident.id, "INSERT"
+
+    incident = match.incident
+    if new_date is not None:
+        incident.created_at = new_date
+    if new_status:
+        incident.status = new_status
+    for field_name in _INCIDENT_UPDATE_FIELDS:
+        value = mapped.get(field_name)
+        if value is not None:
+            setattr(incident, field_name, value)
+    return incident.id, "UPDATE"
+
+
 def _import_document(db: Session, row: ImportRow, mapped: dict, context: dict) -> tuple[str, str] | None:
     device_model_id = _resolve_device_model_id(
         db, manufacturer=mapped.get("manufacturer"), model_number=mapped.get("model_number"), name=None,
@@ -1037,6 +1273,7 @@ _ROW_HANDLERS = {
     "location": _import_location,
     "inventory_location": _import_inventory_location,
     "service_visit": _import_service_visit,
+    "incident": _import_incident,
     "document": _import_document,
 }
 # Row handlers added by Module 14 take a `context` dict (currently just
@@ -1145,12 +1382,13 @@ _ENTITY_MODELS = {
     "inventory_location": InventoryLocation,
     "inventory_item": InventoryItem,
     "service_visit": ServiceVisit,
+    "incident": Incident,
     "document": Document,
 }
 
 # Reverse of SHEET_IMPORT_ORDER dependency direction: delete dependents before their references.
 _ROLLBACK_ORDER = [
-    "document metadata", "service history", "warranty", "cmc contracts", "amc contracts",
+    "document metadata", "incident history", "service history", "warranty", "cmc contracts", "amc contracts",
     "calibration records", "calibration schedule", "pm records", "pm schedule", "vendor contacts", "vendor master",
     "branch device assignments", "device master", "spare parts", "consumables", "device model master",
     "inventory locations", "location master", "department master", "hospital master",

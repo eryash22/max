@@ -251,11 +251,6 @@ export default function DeviceModelsPage() {
                 header: "Model info status",
                 render: (m) => <StatusBadge value={m.model_information_status} />,
               },
-              {
-                key: "catalog_match_status",
-                header: "Catalog match",
-                render: (m) => <StatusBadge value={m.catalog_match_status} />,
-              },
               ...(canWrite
                 ? [
                     {

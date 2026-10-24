@@ -26,7 +26,7 @@ def test_force_delete_branch_blocked_in_production(admin_client, monkeypatch):
 
     response = admin_client.delete(f"/api/v1/branches/{branch['id']}?force=true")
     assert response.status_code == 403
-    assert "production" in response.json()["detail"].lower()
+    assert "development" in response.json()["detail"].lower()
 
     # The branch must still exist — a blocked force-delete is not a partial delete.
     still_there = admin_client.get(f"/api/v1/branches/{branch['id']}")
@@ -42,6 +42,28 @@ def test_force_delete_branch_allowed_outside_production(admin_client, monkeypatc
 
     gone = admin_client.get(f"/api/v1/branches/{branch['id']}")
     assert gone.status_code == 404
+
+
+def test_force_delete_branch_blocked_when_environment_unset(admin_client, monkeypatch):
+    """Security hardening regression guard: the gate is now a fail-closed allowlist
+    (only "development" is permissive) rather than a blocklist on "production" alone
+    — an unset, blank, or unrecognized ENVIRONMENT value must block, not allow."""
+    branch = _make_branch(admin_client)
+    monkeypatch.setattr(settings, "environment", "")
+
+    response = admin_client.delete(f"/api/v1/branches/{branch['id']}?force=true")
+    assert response.status_code == 403
+
+    still_there = admin_client.get(f"/api/v1/branches/{branch['id']}")
+    assert still_there.status_code == 200
+
+
+def test_force_delete_branch_blocked_for_unrecognized_environment_value(admin_client, monkeypatch):
+    branch = _make_branch(admin_client)
+    monkeypatch.setattr(settings, "environment", "staging")
+
+    response = admin_client.delete(f"/api/v1/branches/{branch['id']}?force=true")
+    assert response.status_code == 403
 
 
 def test_force_delete_branch_writes_audit_log(admin_client, db_session):

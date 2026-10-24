@@ -19,6 +19,7 @@ const TEMPLATE_SHEETS: { key: string; label: string }[] = [
   { key: "device model master", label: "Device models" },
   { key: "device master", label: "Physical devices (assets)" },
   { key: "consumables", label: "Consumables" },
+  { key: "incident history", label: "Incidents" },
 ];
 
 export default function ImportsPage() {

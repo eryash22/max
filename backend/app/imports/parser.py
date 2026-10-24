@@ -1,6 +1,7 @@
 import csv
 import hashlib
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from pathlib import Path
 
 import openpyxl
@@ -28,6 +29,18 @@ class ParsedSheet:
 
 def checksum_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def _json_safe_cell(value: object) -> object:
+    """A `.xlsx` date-formatted cell comes through openpyxl as a real `datetime`/
+    `date` object — correct for a template with real dates, but `ImportRow.raw_data`
+    is a JSON column and Python's `datetime` isn't JSON-serializable. Converted to
+    its ISO string here, at the one place every raw cell value passes through,
+    rather than special-cased per sheet (see validators.map_row for the matching
+    fix on the *mapped* side)."""
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
 
 
 def _find_header_row(all_rows: list[tuple], config: SheetConfig | None) -> tuple[int, list[str]]:
@@ -80,7 +93,7 @@ def parse_workbook(path: Path) -> list[ParsedSheet]:
                 value = data_row[col_index] if col_index < len(data_row) else None
                 if isinstance(value, str):
                     value = value.strip() or None
-                raw[header] = value
+                raw[header] = _json_safe_cell(value)
             rows.append(ParsedRow(row_number=header_index + offset + 2, raw=raw))
 
         parsed_sheets.append(
@@ -122,7 +135,7 @@ def parse_csv(path: Path, *, display_name: str) -> list[ParsedSheet]:
             value = data_row[col_index] if col_index < len(data_row) else None
             if isinstance(value, str):
                 value = value.strip() or None
-            raw[header] = value
+            raw[header] = _json_safe_cell(value)
         rows.append(ParsedRow(row_number=header_index + offset + 2, raw=raw))
 
     return [ParsedSheet(name=display_name, config=config, headers=headers, header_row_index=header_index, rows=rows)]

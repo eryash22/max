@@ -441,13 +441,12 @@ export default function ContractDetailPage() {
               <th>Summary</th>
               <th>Parts used</th>
               <th>Cost</th>
-              <th>Next action</th>
             </tr>
           </thead>
           <tbody>
             {visits.length === 0 && (
               <tr>
-                <td colSpan={7}>No service visits recorded for this contract's assets.</td>
+                <td colSpan={6}>No service visits recorded for this contract's assets.</td>
               </tr>
             )}
             {visits.map((v) => (
@@ -458,7 +457,6 @@ export default function ContractDetailPage() {
                 <td>{v.summary ?? "-"}</td>
                 <td>{v.parts_used ?? "-"}</td>
                 <td>{v.cost != null ? v.cost : "-"}</td>
-                <td>{v.next_action ?? "-"}</td>
               </tr>
             ))}
           </tbody>

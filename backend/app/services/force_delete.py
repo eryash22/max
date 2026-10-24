@@ -14,12 +14,20 @@ def assert_dev_environment() -> None:
     permission check alone only proves the caller is a Super Admin, not that this is
     a QA/demo deployment. This is the one thing standing between that and an
     accidental or malicious production data-bomb: every force-delete call site must
-    call this before touching the database. Blocks whenever ENVIRONMENT=production
-    (config.py), regardless of which permission the caller holds."""
-    if settings.environment.strip().lower() == "production":
+    call this before touching the database.
+
+    Fail-closed allowlist (security hardening): allowed ONLY when ENVIRONMENT is
+    explicitly "development" — not merely "not production". A blocklist on
+    "production" alone would silently allow force-delete whenever ENVIRONMENT is
+    unset or misconfigured to any other value, which is exactly the failure mode a
+    forgotten env var on a fresh deployment would hit. Config.py's own default is
+    "development" so local/test runs are unaffected; a real deployment must now set
+    ENVIRONMENT explicitly to get either behavior, rather than silently getting the
+    permissive one by omission."""
+    if settings.environment.strip().lower() != "development":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="DEV data cleanup (force-delete) is disabled when ENVIRONMENT=production.",
+            detail="DEV data cleanup (force-delete) is only allowed when ENVIRONMENT=development.",
         )
 
 # Generic Super-Admin cascade purge, driven by the SQLAlchemy metadata's actual FK

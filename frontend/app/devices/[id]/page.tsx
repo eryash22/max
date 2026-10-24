@@ -179,12 +179,6 @@ export default function DeviceModelDetailPage() {
               </td>
             </tr>
             <tr>
-              <td>Catalog match</td>
-              <td>
-                <StatusBadge value={model.catalog_match_status} />
-              </td>
-            </tr>
-            <tr>
               <td>Known/opening quantity</td>
               <td>{model.known_quantity ?? "-"}</td>
             </tr>

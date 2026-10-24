@@ -144,6 +144,21 @@ class VendorContactIn(BaseModel):
         return value
 
 
+class VendorContactUpdateIn(BaseModel):
+    name: str | None = None
+    role: str | None = None
+    email: EmailStr | None = None
+    phone: str | None = None
+    is_primary: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("name must not be blank")
+        return value
+
+
 class VendorContactOut(BaseModel):
     id: str
     vendor_id: str
@@ -167,6 +182,10 @@ class DeviceModelVendorIn(BaseModel):
         if not (0 <= value <= 3):
             raise ValueError("rank must be between 0 (primary) and 3")
         return value
+
+
+class DeviceModelVendorUpdateIn(BaseModel):
+    notes: str | None = None
 
 
 class DeviceModelVendorOut(BaseModel):

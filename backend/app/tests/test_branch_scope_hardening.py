@@ -296,6 +296,81 @@ def test_central_consumable_pool_stays_visible_to_branch_roles(admin_client, cli
     assert row.get("opening_quantity") is None, "picker-only role must not see central quantities"
 
 
+def test_unit_head_with_granted_inventory_read_cannot_reach_foreign_consumable_by_id(admin_client, client, db_session):
+    """Security hardening: list_consumables already scoped correctly, but the by-ID
+    routes (get/update/delete/transactions/last-transaction) used a bare _get_or_404
+    with no branch check — a branch role granted inventory.read (a real possibility,
+    see this file's own docstring) could read/edit/delete another branch's consumable
+    directly by ID. All five by-ID routes must now 404, matching the list route's
+    confirm-nothing posture."""
+    mine, theirs, _, _ = _two_branch_assets(admin_client)
+
+    theirs_consumable = admin_client.post(
+        "/api/v1/consumables",
+        json={"item_code": "SCOPE-THEIRS-CONS-1", "name": "Theirs Gauze", "branch_id": theirs["id"],
+              "unit": "BOX", "opening_quantity": 10},
+    ).json()
+
+    _grant(admin_client, db_session, "UNIT_HEAD", "inventory.read", "inventory.write")
+    headers = _scoped_headers(client, db_session, email="scope.uh.cons.byid@example.com",
+                               role_code="UNIT_HEAD", branch_id=mine["id"])
+
+    assert client.get(f"/api/v1/consumables/{theirs_consumable['id']}", headers=headers).status_code == 404
+    assert client.patch(
+        f"/api/v1/consumables/{theirs_consumable['id']}", json={"name": "Hijacked"}, headers=headers
+    ).status_code == 404
+    assert client.get(
+        f"/api/v1/consumables/{theirs_consumable['id']}/transactions", headers=headers
+    ).status_code == 404
+    assert client.get(
+        f"/api/v1/consumables/{theirs_consumable['id']}/last-transaction", headers=headers
+    ).status_code == 404
+    assert client.delete(f"/api/v1/consumables/{theirs_consumable['id']}", headers=headers).status_code == 404
+
+    # The record must still exist — every one of the above was blocked, not applied.
+    still_there = admin_client.get(f"/api/v1/consumables/{theirs_consumable['id']}")
+    assert still_there.status_code == 200
+    assert still_there.json()["name"] == "Theirs Gauze"
+
+
+def test_unit_head_with_granted_inventory_read_can_reach_own_branch_consumable_by_id(admin_client, client, db_session):
+    mine, _, _, _ = _two_branch_assets(admin_client)
+
+    mine_consumable = admin_client.post(
+        "/api/v1/consumables",
+        json={"item_code": "SCOPE-MINE-CONS-1", "name": "Mine Gauze", "branch_id": mine["id"],
+              "unit": "BOX", "opening_quantity": 10},
+    ).json()
+
+    _grant(admin_client, db_session, "UNIT_HEAD", "inventory.read")
+    headers = _scoped_headers(client, db_session, email="scope.uh.cons.own@example.com",
+                               role_code="UNIT_HEAD", branch_id=mine["id"])
+
+    response = client.get(f"/api/v1/consumables/{mine_consumable['id']}", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["name"] == "Mine Gauze"
+
+
+def test_unit_head_with_granted_inventory_read_can_reach_central_consumable_by_id(admin_client, client, db_session):
+    """The shared central pool (branch_id IS NULL) must stay reachable by ID too, same
+    as it already is through the list endpoint's central_only filter."""
+    mine, _, _, _ = _two_branch_assets(admin_client)
+
+    central = admin_client.post(
+        "/api/v1/consumables",
+        json={"item_code": "SCOPE-CENTRAL-BYID-1", "name": "Central Bandage", "unit": "BOX",
+              "opening_quantity": 500},
+    ).json()
+
+    _grant(admin_client, db_session, "UNIT_HEAD", "inventory.read")
+    headers = _scoped_headers(client, db_session, email="scope.uh.cons.central@example.com",
+                               role_code="UNIT_HEAD", branch_id=mine["id"])
+
+    response = client.get(f"/api/v1/consumables/{central['id']}", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["name"] == "Central Bandage"
+
+
 # ---- Fulfillments (F8 + F11) ----
 
 def test_unit_head_sees_whole_branch_fulfillments_not_only_own(admin_client, client, db_session):

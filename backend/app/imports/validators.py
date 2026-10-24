@@ -1,3 +1,5 @@
+from datetime import date, datetime
+
 from .mapping import SheetConfig, _norm
 
 BLANK_TOKENS = {"", "n/a", "na", "not provided", "not applicable", "unknown", "pending", "null"}
@@ -13,12 +15,21 @@ def is_blank(value: object) -> bool:
 
 def map_row(config: SheetConfig, raw: dict[str, object]) -> dict[str, object]:
     """Translate raw column headers to model field names. Unknown headers are dropped
-    from mapped_data but remain available in raw_data for audit purposes."""
+    from mapped_data but remain available in raw_data for audit purposes.
+
+    A `.xlsx` date-formatted cell comes through openpyxl as a real `datetime`/`date`
+    object (not text) — correct for matching/parsing, but `ImportRow.mapped_data` is
+    a JSON column, and Python's `datetime` isn't JSON-serializable, so it's converted
+    to its ISO string here before storage. Every downstream consumer (business_key,
+    validators, the approve-time handlers) already expects/accepts an ISO string for
+    a date field — this is the one place that conversion needs to happen."""
     mapped: dict[str, object] = {}
     for header, value in raw.items():
         field_name = config.column_map.get(_norm(header))
         if field_name is None:
             continue
+        if isinstance(value, (datetime, date)):
+            value = value.isoformat()
         mapped[field_name] = None if is_blank(value) else value
     return mapped
 

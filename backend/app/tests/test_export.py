@@ -65,7 +65,7 @@ def test_vendor_export_xlsx(admin_client):
     assert rows[0] == [
         "Vendor Name", "Vendor Type", "OEM", "Authorized Distributor", "Service Vendor",
         "City", "State", "Email", "Phone", "Website", "Support Coverage", "SLA Response Hours",
-        "Rating", "Status",
+        "Status",
     ]
     assert any(r[0] == "XLSX Export Vendor" for r in rows[1:])
 

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..dependencies.auth import require_permission
+from ..exports.writer import EXPORT_FORMATS, build_export_response
 from ..models.device import Asset, DeviceModel
 from ..models.documents import Document, DocumentLink
 from ..models.hospital import Branch
@@ -27,6 +28,7 @@ from ..schemas.incident import (
 from ..security.permissions import DEV_DATA_CLEANUP, INCIDENT_CREATE, INCIDENT_MANAGE, INCIDENT_READ, branch_scope_id
 from ..services import asset_lifecycle_service, procurement_service
 from ..audit.service import record as audit_record
+from ..services.export_service import MAX_EXPORT_ROWS, record_export_audit
 from ..services.force_delete import assert_dev_environment, force_delete_row
 from ..services.incident_service import (
     IncidentServiceError,
@@ -177,6 +179,109 @@ def report_incident(payload: IncidentIn, db: Session = Depends(get_db),
                 detail="Selected device does not belong to the selected branch.",
             )
     return create_incident(db, payload, reported_by=current_user.id)
+
+
+_INCIDENT_STATUS_EXPORT_LABELS = {
+    "OPEN": "Open",
+    "WORK_IN_PROGRESS": "WIP",
+    "TO_BE_CONDEMNED": "To Be Condemned",
+    "OPERATIONAL": "Closed",
+    "CANCELLED": "Cancelled",
+}
+
+
+@router.get("/export")
+def export_incidents(
+    format: str = "xlsx", search: str | None = None, branch_id: str | None = None,
+    status_filter: str | None = None, severity: str | None = None, vendor_id: str | None = None,
+    db: Session = Depends(get_db), current_user: CurrentUser = Depends(require_permission(INCIDENT_READ)),
+):
+    """Column set matches imports/mapping.py's "incident history" sheet column_map,
+    so an export can be edited in Excel and re-imported cleanly (round-trip). Reuses
+    list_incidents' own filters/branch-scoping rather than a second query-building
+    path — a branch-restricted caller can only ever export their own branch's rows,
+    same as they can only list them."""
+    if format not in EXPORT_FORMATS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"format must be one of {', '.join(EXPORT_FORMATS)}")
+
+    query = db.query(Incident)
+    exact_filters = {"branch_id": branch_id, "severity": severity}
+    for field, value in exact_filters.items():
+        if value is not None:
+            query = query.filter(getattr(Incident, field) == value)
+    if status_filter:
+        statuses = [s.strip() for s in status_filter.split(",") if s.strip()]
+        if statuses:
+            query = query.filter(Incident.status.in_(statuses))
+
+    query = (
+        query.outerjoin(Asset, Incident.asset_id == Asset.id)
+        .outerjoin(DeviceModel, Asset.device_model_id == DeviceModel.id)
+        .outerjoin(Branch, Incident.branch_id == Branch.id)
+        .outerjoin(DeviceModelVendor, DeviceModelVendor.device_model_id == Asset.device_model_id)
+        .outerjoin(Vendor, Vendor.id == DeviceModelVendor.vendor_id)
+        .distinct()
+    )
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            or_(
+                Incident.description.ilike(like), Incident.cer_number.ilike(like),
+                Incident.indent_number.ilike(like), Incident.po_number.ilike(like),
+                DeviceModel.name.ilike(like), Branch.name.ilike(like), Vendor.name.ilike(like),
+            )
+        )
+    if vendor_id:
+        query = query.filter(DeviceModelVendor.vendor_id == vendor_id)
+
+    scoped_branch_id = branch_scope_id(current_user.roles, current_user.hospital_scope_id)
+    if INCIDENT_MANAGE not in current_user.permissions:
+        if scoped_branch_id is not None:
+            query = query.filter(Incident.branch_id == scoped_branch_id)
+        else:
+            query = query.filter(Incident.reported_by == current_user.id)
+
+    total = query.count()
+    rows_q = query.order_by(Incident.created_at.desc()).limit(MAX_EXPORT_ROWS).all()
+
+    headers = [
+        "Item Name", "Date", "Unit", "Make", "Vendor", "Issue Description",
+        "CER No", "Indent No", "PO No", "PO Closure Date", "Status",
+        "PO Cost - excl. GST", "PO GST %", "PO Amount",
+        "Vendor Estimate Cost - excl. GST", "Vendor Estimate GST %", "Vendor Estimate Cost - incl. GST",
+        "Remark",
+    ]
+    rows = []
+    for incident in rows_q:
+        device_name = None
+        vendor_name = None
+        if incident.asset_id:
+            asset = db.get(Asset, incident.asset_id)
+            if asset and asset.device_model_id:
+                model = db.get(DeviceModel, asset.device_model_id)
+                device_name = model.name if model else None
+                link = db.query(DeviceModelVendor).filter(DeviceModelVendor.device_model_id == asset.device_model_id).first()
+                if link:
+                    vendor = db.get(Vendor, link.vendor_id)
+                    vendor_name = vendor.name if vendor else None
+        branch = db.get(Branch, incident.branch_id) if incident.branch_id else None
+        rows.append([
+            device_name, incident.created_at.isoformat() if incident.created_at else None,
+            branch.name if branch else None, None, vendor_name, incident.description,
+            incident.cer_number, incident.indent_number, incident.po_number, incident.po_closure_date,
+            _INCIDENT_STATUS_EXPORT_LABELS.get(incident.status, incident.status),
+            incident.po_cost_excl_gst, incident.po_gst_percent, incident.po_amount,
+            incident.vendor_estimate_cost_excl_gst, incident.vendor_estimate_gst_percent,
+            incident.vendor_estimate_cost_incl_gst, None,
+        ])
+
+    record_export_audit(
+        db, user_id=current_user.id, module="incidents",
+        filters={"search": search, "branch_id": branch_id, "status_filter": status_filter,
+                 "severity": severity, "vendor_id": vendor_id},
+        format=format, record_count=len(rows), truncated=total > MAX_EXPORT_ROWS,
+    )
+    return build_export_response(headers=headers, rows=rows, format=format, filename_stem="incidents_export")
 
 
 @router.get("/{incident_id}", response_model=IncidentOut)

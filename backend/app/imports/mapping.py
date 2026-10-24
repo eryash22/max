@@ -322,6 +322,40 @@ SHEET_CONFIGS: dict[str, SheetConfig] = {
         required=["asset_number"],
         business_key_fields=["asset_number", "visit_date"],
     ),
+    # Incident history — source workbook for this sheet typically has its original
+    # tab/column headers prepared into this exact shape first (see
+    # services/import_service.py's _match_incident docstring for why: a raw .xlsx
+    # sheet is matched purely by its tab NAME, with no header-overlap fallback the
+    # way CSV uploads get, and a workbook that has the same header text twice — e.g.
+    # two "GST %" columns for PO vs vendor-estimate GST — silently loses the first
+    # one's values when its raw row is parsed into a plain dict keyed by header text.
+    # Neither is a pipeline bug; both are solved by preparing a renamed copy before
+    # upload, never by special-casing this one sheet's parsing.
+    "incident history": SheetConfig(
+        entity_type="incident",
+        column_map={
+            "item name": "device_name",
+            "date": "incident_date",
+            "unit": "branch_code",
+            "make": "manufacturer",
+            "vendor": "vendor_name",
+            "issue description": "description",
+            "cer no": "cer_number",
+            "indent no": "indent_number",
+            "po no": "po_number",
+            "po closure date": "po_closure_date",
+            "status": "status",
+            "po cost - excl. gst": "po_cost_excl_gst",
+            "po gst %": "po_gst_percent",
+            "po amount": "po_amount",
+            "vendor estimate cost - excl. gst": "vendor_estimate_cost_excl_gst",
+            "vendor estimate gst %": "vendor_estimate_gst_percent",
+            "vendor estimate cost - incl. gst": "vendor_estimate_cost_incl_gst",
+            "remark": "remark",
+        },
+        required=["branch_code", "description"],
+        business_key_fields=["branch_code", "description", "incident_date"],
+    ),
     "document metadata": SheetConfig(
         entity_type="document",
         column_map={
@@ -366,6 +400,7 @@ SHEET_IMPORT_ORDER = [
     "cmc contracts",
     "warranty",
     "service history",
+    "incident history",
     "document metadata",
 ]
 

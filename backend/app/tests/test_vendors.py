@@ -1,6 +1,6 @@
 from app.models.audit import AuditLog
 
-from .conftest import auth_headers, create_user
+from .conftest import ADMIN_EMAIL, ADMIN_PASSWORD, auth_headers, create_user
 
 
 def _engineer_headers(client, db_session, email="vendeng@example.com"):
@@ -320,6 +320,64 @@ def test_create_vendor_contact_requires_existing_vendor(admin_client):
     assert response.status_code == 404
 
 
+def test_update_vendor_contact(admin_client):
+    vendor = admin_client.post("/api/v1/vendors", json={"name": "Editable Contact Vendor"}).json()
+    contact = admin_client.post(
+        f"/api/v1/vendors/{vendor['id']}/contacts",
+        json={"name": "Original Name", "phone": "111"},
+    ).json()
+
+    updated = admin_client.patch(
+        f"/api/v1/vendors/{vendor['id']}/contacts/{contact['id']}",
+        json={"name": "Updated Name", "phone": "222"},
+    )
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["name"] == "Updated Name"
+    assert body["phone"] == "222"
+
+    listed = admin_client.get(f"/api/v1/vendors/{vendor['id']}/contacts").json()
+    assert listed[0]["name"] == "Updated Name"
+
+
+def test_update_vendor_contact_wrong_vendor_404s(admin_client):
+    vendor_a = admin_client.post("/api/v1/vendors", json={"name": "Vendor A"}).json()
+    vendor_b = admin_client.post("/api/v1/vendors", json={"name": "Vendor B"}).json()
+    contact = admin_client.post(f"/api/v1/vendors/{vendor_a['id']}/contacts", json={"name": "Carol"}).json()
+
+    response = admin_client.patch(
+        f"/api/v1/vendors/{vendor_b['id']}/contacts/{contact['id']}",
+        json={"name": "Hijacked"},
+    )
+    assert response.status_code == 404
+
+
+def test_update_vendor_contact_requires_vendor_write(client, db_session):
+    headers = _engineer_headers(client, db_session)
+    create_user(db_session, ADMIN_EMAIL, "SUPER_ADMIN", ADMIN_PASSWORD)
+    admin_headers = auth_headers(client, ADMIN_EMAIL, ADMIN_PASSWORD)
+    vendor = client.post("/api/v1/vendors", json={"name": "Permission Vendor"}, headers=admin_headers).json()
+    contact = client.post(
+        f"/api/v1/vendors/{vendor['id']}/contacts", json={"name": "Dana"}, headers=admin_headers
+    ).json()
+
+    response = client.patch(
+        f"/api/v1/vendors/{vendor['id']}/contacts/{contact['id']}", json={"name": "Blocked"}, headers=headers
+    )
+    assert response.status_code == 403
+
+
+def test_delete_vendor_contact(admin_client):
+    vendor = admin_client.post("/api/v1/vendors", json={"name": "Deletable Contact Vendor"}).json()
+    contact = admin_client.post(f"/api/v1/vendors/{vendor['id']}/contacts", json={"name": "Erin"}).json()
+
+    response = admin_client.delete(f"/api/v1/vendors/{vendor['id']}/contacts/{contact['id']}")
+    assert response.status_code == 204
+
+    listed = admin_client.get(f"/api/v1/vendors/{vendor['id']}/contacts").json()
+    assert listed == []
+
+
 # ---- Vendor <-> device model linkage ----
 
 def test_link_vendor_to_device_model(admin_client):
@@ -345,6 +403,48 @@ def test_link_vendor_to_device_model_requires_valid_model(admin_client):
         json={"device_model_id": "does-not-exist"},
     )
     assert response.status_code == 404
+
+
+def test_update_vendor_device_model_link(admin_client):
+    vendor = admin_client.post("/api/v1/vendors", json={"name": "Editable Link Vendor"}).json()
+    model = _make_device_model(admin_client, name="Editable-Model-1")
+    link = admin_client.post(
+        f"/api/v1/vendors/{vendor['id']}/device-models", json={"device_model_id": model["id"]}
+    ).json()
+
+    updated = admin_client.patch(
+        f"/api/v1/vendors/{vendor['id']}/device-models/{link['id']}", json={"notes": "Primary repair partner"}
+    )
+    assert updated.status_code == 200
+    assert updated.json()["notes"] == "Primary repair partner"
+
+
+def test_update_vendor_device_model_link_wrong_vendor_404s(admin_client):
+    vendor_a = admin_client.post("/api/v1/vendors", json={"name": "Link Vendor A"}).json()
+    vendor_b = admin_client.post("/api/v1/vendors", json={"name": "Link Vendor B"}).json()
+    model = _make_device_model(admin_client, name="Editable-Model-2")
+    link = admin_client.post(
+        f"/api/v1/vendors/{vendor_a['id']}/device-models", json={"device_model_id": model["id"]}
+    ).json()
+
+    response = admin_client.patch(
+        f"/api/v1/vendors/{vendor_b['id']}/device-models/{link['id']}", json={"notes": "Hijacked"}
+    )
+    assert response.status_code == 404
+
+
+def test_delete_vendor_device_model_link(admin_client):
+    vendor = admin_client.post("/api/v1/vendors", json={"name": "Unlinkable Vendor"}).json()
+    model = _make_device_model(admin_client, name="Editable-Model-3")
+    link = admin_client.post(
+        f"/api/v1/vendors/{vendor['id']}/device-models", json={"device_model_id": model["id"]}
+    ).json()
+
+    response = admin_client.delete(f"/api/v1/vendors/{vendor['id']}/device-models/{link['id']}")
+    assert response.status_code == 204
+
+    listed = admin_client.get(f"/api/v1/vendors/{vendor['id']}/device-models").json()
+    assert listed == []
 
 
 # ---- Audit logging ----

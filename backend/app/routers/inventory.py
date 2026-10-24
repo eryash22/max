@@ -36,6 +36,23 @@ def _get_or_404(db: Session, model, entity_id: str, label: str):
     return obj
 
 
+def _get_consumable_scoped_or_404(db: Session, consumable_id: str, current_user: CurrentUser) -> Consumable:
+    """Security hardening — the by-ID consumable endpoints (get/update/delete/
+    transactions/last-transaction) previously used the generic `_get_or_404` with no
+    branch check, unlike `list_consumables` which already scopes correctly via
+    `branch_scope_id`. That let a branch-scoped caller who knew/guessed another
+    branch's consumable_id read, edit, or delete it directly. 404 (not 403) here,
+    matching list_consumables' own confirm-nothing-about-other-branches posture — a
+    branch-scoped caller gets the same response for "doesn't exist" and "exists in a
+    branch you can't see". The shared central pool (branch_id IS NULL) stays
+    reachable for everyone, same as the list endpoint's `central_only` rows."""
+    consumable = _get_or_404(db, Consumable, consumable_id, "Consumable")
+    scoped_branch_id = branch_scope_id(current_user.roles, current_user.hospital_scope_id)
+    if scoped_branch_id is not None and consumable.branch_id is not None and consumable.branch_id != scoped_branch_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Consumable not found")
+    return consumable
+
+
 # ---- Items ----
 
 @router.get("/inventory/items", response_model=Page[InventoryItemOut])
@@ -286,15 +303,15 @@ def create_consumable(payload: ConsumableIn, db: Session = Depends(get_db),
 
 @router.get("/consumables/{consumable_id}", response_model=ConsumableOut)
 def get_consumable(consumable_id: str, db: Session = Depends(get_db),
-                    _: CurrentUser = Depends(require_permission(INVENTORY_READ))):
-    consumable = _get_or_404(db, Consumable, consumable_id, "Consumable")
+                    current_user: CurrentUser = Depends(require_permission(INVENTORY_READ))):
+    consumable = _get_consumable_scoped_or_404(db, consumable_id, current_user)
     return inventory_service.to_consumable_out(consumable)
 
 
 @router.patch("/consumables/{consumable_id}", response_model=ConsumableOut)
 def update_consumable(consumable_id: str, payload: ConsumableUpdateIn, db: Session = Depends(get_db),
                        current_user: CurrentUser = Depends(require_permission(INVENTORY_WRITE))):
-    consumable = _get_or_404(db, Consumable, consumable_id, "Consumable")
+    consumable = _get_consumable_scoped_or_404(db, consumable_id, current_user)
     if payload.vendor_id is not None:
         _get_or_404(db, Vendor, payload.vendor_id, "Vendor")
     consumable = inventory_service.update_consumable(db, consumable, payload, user_id=current_user.id)
@@ -312,7 +329,7 @@ def delete_consumable(consumable_id: str, force: bool = False, db: Session = Dep
 
     ``force=true`` (Super Admin only, gated on DEV_DATA_CLEANUP) bypasses that guard —
     see inventory_service.delete_consumable's force branch."""
-    consumable = _get_or_404(db, Consumable, consumable_id, "Consumable")
+    consumable = _get_consumable_scoped_or_404(db, consumable_id, current_user)
     if force:
         if DEV_DATA_CLEANUP not in current_user.permissions:
             raise HTTPException(
@@ -330,8 +347,8 @@ def delete_consumable(consumable_id: str, force: bool = False, db: Session = Dep
 @router.get("/consumables/{consumable_id}/transactions", response_model=Page[ConsumableTransactionOut])
 def list_consumable_transactions(consumable_id: str, page: int = 1, page_size: int = 25,
                                   db: Session = Depends(get_db),
-                                  _: CurrentUser = Depends(require_permission(INVENTORY_READ))):
-    _get_or_404(db, Consumable, consumable_id, "Consumable")
+                                  current_user: CurrentUser = Depends(require_permission(INVENTORY_READ))):
+    _get_consumable_scoped_or_404(db, consumable_id, current_user)
     items, total = inventory_service.list_consumable_transactions(
         db, page=page, page_size=page_size, consumable_id=consumable_id,
     )
@@ -340,7 +357,7 @@ def list_consumable_transactions(consumable_id: str, page: int = 1, page_size: i
 
 @router.get("/consumables/{consumable_id}/last-transaction", response_model=ConsumableTransactionOut | None)
 def get_consumable_last_transaction(consumable_id: str, db: Session = Depends(get_db),
-                                     _: CurrentUser = Depends(require_permission(INVENTORY_READ))):
+                                     current_user: CurrentUser = Depends(require_permission(INVENTORY_READ))):
     """Final admin/inventory/vendor/dashboard polish pass — Part 4: the single most
     recent stock movement affecting this consumable's own location (STOCK_OUT at its
     own branch, or a TRANSFER naming it as source/destination — see
@@ -349,7 +366,7 @@ def get_consumable_last_transaction(consumable_id: str, db: Session = Depends(ge
     `page_size=1` rather than duplicating its item_code/branch matching logic. `null`
     when the consumable has no transaction history yet — not a 404, since the
     consumable itself exists."""
-    _get_or_404(db, Consumable, consumable_id, "Consumable")
+    _get_consumable_scoped_or_404(db, consumable_id, current_user)
     items, _total = inventory_service.list_consumable_transactions(
         db, page=1, page_size=1, consumable_id=consumable_id,
     )

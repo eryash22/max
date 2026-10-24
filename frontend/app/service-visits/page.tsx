@@ -137,7 +137,6 @@ export default function ServiceVisitsPage() {
         summary: formData.get("summary") || null,
         parts_used: formData.get("parts_used") || null,
         cost: formData.get("cost") ? Number(formData.get("cost")) : null,
-        next_action: formData.get("next_action") || null,
         issue: formData.get("issue") || null,
         downtime_hours: formData.get("downtime_hours") ? Number(formData.get("downtime_hours")) : null,
       });
@@ -163,7 +162,6 @@ export default function ServiceVisitsPage() {
         summary: formData.get("summary") || null,
         parts_used: formData.get("parts_used") || null,
         cost: formData.get("cost") ? Number(formData.get("cost")) : null,
-        next_action: formData.get("next_action") || null,
         issue: formData.get("issue") || null,
         downtime_hours: formData.get("downtime_hours") ? Number(formData.get("downtime_hours")) : null,
       });
@@ -311,10 +309,6 @@ export default function ServiceVisitsPage() {
               <label>Parts used</label>
               <input name="parts_used" />
             </div>
-            <div className="form-field">
-              <label>Next action</label>
-              <input name="next_action" />
-            </div>
           </div>
           {formError && <div className="field-error">{formError}</div>}
           <button className="btn btn--primary" type="submit">
@@ -458,10 +452,6 @@ export default function ServiceVisitsPage() {
                     <div className="form-field">
                       <label>Parts used</label>
                       <input name="parts_used" defaultValue={visit.parts_used ?? ""} />
-                    </div>
-                    <div className="form-field">
-                      <label>Next action</label>
-                      <input name="next_action" defaultValue={visit.next_action ?? ""} />
                     </div>
                   </div>
                 );
