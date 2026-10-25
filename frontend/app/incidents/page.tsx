@@ -397,7 +397,7 @@ export default function IncidentsPage() {
                 header: "Remark",
                 render: (i) => (
                   <span style={{ whiteSpace: "normal", wordBreak: "break-word", minWidth: 160, display: "inline-block" }}>
-                    {i.resolution ?? "-"}
+                    {i.remark ?? i.resolution ?? "-"}
                   </span>
                 ),
               },
