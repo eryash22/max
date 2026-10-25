@@ -316,7 +316,17 @@ export default function IncidentDetailPage() {
             </div>
             <div className="form-field">
               <label>Device status at report</label>
-              <input name="device_status_at_report" defaultValue={incident.device_status_at_report ?? ""} />
+              <select name="device_status_at_report" defaultValue={incident.device_status_at_report ?? ""}>
+                <option value="">Not specified</option>
+                {incident.device_status_at_report && !INCIDENT_STATUSES.includes(incident.device_status_at_report) && (
+                  <option value={incident.device_status_at_report}>{incident.device_status_at_report} (legacy value)</option>
+                )}
+                {INCIDENT_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {s.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="form-field" style={{ justifyContent: "flex-end", gap: 8 }}>
               <button type="button" className="btn btn--ghost" onClick={() => setEditingDetails(false)} disabled={busy}>

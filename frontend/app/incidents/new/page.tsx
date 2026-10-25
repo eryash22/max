@@ -7,7 +7,7 @@ import { useAuth } from "../../../hooks/useAuth";
 import { useLookup } from "../../../hooks/useLookup";
 import { api, ApiError } from "../../../lib/api";
 import type { Asset, Branch, Department, DeviceModel, Incident } from "../../../types";
-import { INCIDENT_SEVERITIES } from "../../../types";
+import { INCIDENT_SEVERITIES, INCIDENT_STATUSES } from "../../../types";
 
 // Branch-scoping hardening pass — same rationale as requirements/new/page.tsx:
 // UNIT_HEAD/TL's branch is fixed by role assignment, not a free choice.
@@ -193,7 +193,14 @@ export default function NewIncidentPage() {
           </div>
           <div className="form-field">
             <label>Device status when reported</label>
-            <input name="device_status_at_report" placeholder="Optional" />
+            <select name="device_status_at_report" defaultValue="">
+              <option value="">Not specified</option>
+              {INCIDENT_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s.replace(/_/g, " ")}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
