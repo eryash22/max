@@ -681,6 +681,13 @@ export interface Incident {
   vendor_estimate_cost_excl_gst: number | null;
   vendor_estimate_gst_percent: number | null;
   vendor_estimate_cost_incl_gst: number | null;
+  // Free-text device/make/vendor/remark from the Incident History Excel import —
+  // distinct from asset_id (this historical data often has no linked Asset at
+  // all). See backend/app/models/incident.py / migrations/0029.
+  device_name: string | null;
+  manufacturer: string | null;
+  vendor_name: string | null;
+  remark: string | null;
   // Only populated on the single-incident detail read (GET /incidents/{id}) when
   // asset_id is set — see routers/incidents.py.
   coverage?: IncidentCoverage | null;

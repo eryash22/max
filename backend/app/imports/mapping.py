@@ -16,6 +16,12 @@ class SheetConfig:
     column_map: dict[str, str]  # source header (normalized, no '*') -> model field
     required: list[str]  # model field names that must be present
     business_key_fields: list[str] = field(default_factory=list)
+    # When true, parser.parse_workbook does a second (slower) pass over this
+    # sheet's cells with formulas intact, so a formula-containing cell can be
+    # flagged in the import preview instead of its cached value being trusted
+    # silently — see ParsedRow.formula_fields. Opt-in per sheet (default
+    # False) so the extra pass only happens where it's actually needed.
+    detect_formulas: bool = False
 
 
 def _norm(header: str) -> str:
@@ -322,15 +328,17 @@ SHEET_CONFIGS: dict[str, SheetConfig] = {
         required=["asset_number"],
         business_key_fields=["asset_number", "visit_date"],
     ),
-    # Incident history — source workbook for this sheet typically has its original
-    # tab/column headers prepared into this exact shape first (see
-    # services/import_service.py's _match_incident docstring for why: a raw .xlsx
-    # sheet is matched purely by its tab NAME, with no header-overlap fallback the
-    # way CSV uploads get, and a workbook that has the same header text twice — e.g.
-    # two "GST %" columns for PO vs vendor-estimate GST — silently loses the first
-    # one's values when its raw row is parsed into a plain dict keyed by header text.
-    # Neither is a pipeline bug; both are solved by preparing a renamed copy before
-    # upload, never by special-casing this one sheet's parsing.
+    # Incident history — matches the user's own `incident_history_template.xlsx`
+    # exactly: 18 columns (`Unit*`/`Issue Description*` required, the trailing `*`
+    # stripped by `_norm()` same as every other required-marker header in this
+    # file), sheet tab literally named "Sheet" — parser.parse_workbook falls back
+    # to header-overlap matching (best_fit_config) for any .xlsx sheet whose tab
+    # name doesn't match a known config, so a generically-named tab like this one
+    # routes correctly without the upload needing to be renamed first.
+    # detect_formulas=True: a formula cell (e.g. a stray cross-row SUM() left in a
+    # per-incident Po Cost/Po Amount cell) must be flagged in the import preview,
+    # never silently trusted — see import_service.py's incident row handling and
+    # parser.py's _formula_fields_by_row.
     "incident history": SheetConfig(
         entity_type="incident",
         column_map={
@@ -355,6 +363,7 @@ SHEET_CONFIGS: dict[str, SheetConfig] = {
         },
         required=["branch_code", "description"],
         business_key_fields=["branch_code", "description", "incident_date"],
+        detect_formulas=True,
     ),
     "document metadata": SheetConfig(
         entity_type="document",

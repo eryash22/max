@@ -52,6 +52,16 @@ class Incident(BaseModel):
     vendor_estimate_gst_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
     vendor_estimate_cost_incl_gst: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # Free-text device/make/vendor/remark, distinct from `asset_id` (a real link
+    # to a physical Asset, which this historical repair-log data often has none
+    # of). Exists so the Incident History Excel import ("Item Name"/"Make"/
+    # "Vendor"/"Remark" columns) has somewhere faithful to land rather than being
+    # silently discarded — see migrations/0029 and services/import_service.py.
+    device_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    manufacturer: Mapped[str | None] = mapped_column(String, nullable=True)
+    vendor_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    remark: Mapped[str | None] = mapped_column(String, nullable=True)
+
 
 class IncidentStatusHistory(BaseModel):
     """Every state transition an incident goes through — the auditable trail Part 3/4 require."""

@@ -4,12 +4,84 @@ from sqlalchemy.orm import Session
 
 from ..audit.service import record as audit_record
 from ..models.device import Asset
+from ..models.documents import DocumentLink
+from ..models.escalation import EscalationEvent
 from ..models.hospital import Branch
 from ..models.identity import User
-from ..models.incident import Incident, IncidentStatusHistory
+from ..models.incident import Incident, IncidentStatusHistory, ServiceVisit
+from ..models.maintenance import CalibrationRecord, PMRecord
+from ..models.procurement import Indent, Invoice, PurchaseOrder, Quotation
 from ..schemas.incident import IncidentAssignIn, IncidentIn, IncidentStatusChangeIn, IncidentUpdateIn
 from ..schemas.notification import EVENT_INCIDENT_ASSIGNED, EVENT_INCIDENT_RESOLVED
 from .communication_service import dispatch_incident_event_safe
+
+_DOCUMENT_LINK_ENTITY_TYPE = "incident"
+
+# The four procurement record types that carry a required (NOT NULL) incident_id —
+# real financial/business records, independent of the incident that originated
+# them, that must never be silently destroyed by deleting the incident. Anything
+# NOT in this list but still referencing incidents.id is either nullable (detached,
+# not deleted — see delete_incident_safe) or incident-owned history with no
+# independent meaning (cascaded, not blocked — also see delete_incident_safe).
+_INCIDENT_BLOCKING_MODELS = [
+    (Quotation, "quotation"), (Indent, "indent"),
+    (PurchaseOrder, "purchase order"), (Invoice, "invoice"),
+]
+
+
+class IncidentHasBlockingDependentsError(Exception):
+    """Raised by delete_incident_safe when a real procurement record (Quotation/
+    Indent/PurchaseOrder/Invoice — see _INCIDENT_BLOCKING_MODELS) still references
+    this incident. `blockers` is [(label, [ids]), ...] for a precise, actionable
+    error rather than a generic "can't delete" message."""
+
+    def __init__(self, incident_id: str, blockers: list[tuple[str, list[str]]]):
+        self.incident_id = incident_id
+        self.blockers = blockers
+        summary = "; ".join(f"{len(ids)} {label}(s)" for label, ids in blockers)
+        super().__init__(f"Incident {incident_id} is still referenced by {summary}")
+
+
+def incident_blocking_dependents(db: Session, incident_id: str) -> list[tuple[str, list[str]]]:
+    """Read-only: which real business records (if any) block deleting this
+    incident. Empty list means it's safe to delete. Shared by delete_incident_safe
+    and the bulk-delete/replace-all preview endpoints so "what would be blocked"
+    and "what actually blocks the real delete" can never drift apart."""
+    blockers: list[tuple[str, list[str]]] = []
+    for model, label in _INCIDENT_BLOCKING_MODELS:
+        ids = [row.id for row in db.query(model.id).filter(model.incident_id == incident_id).all()]
+        if ids:
+            blockers.append((label, ids))
+    return blockers
+
+
+def delete_incident_safe(db: Session, incident: Incident) -> None:
+    """Deletes one Incident and everything that is genuinely *owned* by it, while
+    refusing (IncidentHasBlockingDependentsError) if a real procurement record still
+    depends on it, and detaching (never deleting) service/PM/calibration records
+    that merely reference it. Does not commit — caller controls the transaction,
+    same convention as every other delete path in this codebase. Does not write an
+    audit entry itself — bulk callers write one audit entry per batch; this stays a
+    pure, reusable data operation."""
+    blockers = incident_blocking_dependents(db, incident.id)
+    if blockers:
+        raise IncidentHasBlockingDependentsError(incident.id, blockers)
+
+    # Incident-owned — no independent meaning once the incident is gone.
+    db.query(IncidentStatusHistory).filter(IncidentStatusHistory.incident_id == incident.id).delete()
+    db.query(EscalationEvent).filter(EscalationEvent.incident_id == incident.id).delete()
+    db.query(DocumentLink).filter(
+        DocumentLink.entity_type == _DOCUMENT_LINK_ENTITY_TYPE, DocumentLink.entity_id == incident.id,
+    ).delete()
+
+    # Nullable references — the record itself is real and independent (a service
+    # visit, PM record, or calibration record that happened to be raised from this
+    # incident); detach it, never delete it.
+    db.query(ServiceVisit).filter(ServiceVisit.incident_id == incident.id).update({"incident_id": None})
+    db.query(PMRecord).filter(PMRecord.incident_id == incident.id).update({"incident_id": None})
+    db.query(CalibrationRecord).filter(CalibrationRecord.incident_id == incident.id).update({"incident_id": None})
+
+    db.delete(incident)
 
 # Business-workflow audit: device issues route to BME for technical repair, never to
 # Inventory Manager. assign_incident() previously accepted any user_id as

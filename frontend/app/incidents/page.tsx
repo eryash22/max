@@ -59,12 +59,31 @@ export default function IncidentsPage() {
     if (vf) setVendorId(vf);
   }, []);
 
+  // date/status/severity sort is real server-side ordering (see backend
+  // list_incidents' sort_by/sort_dir) — previously this whole dropdown only
+  // re-sorted the 25 rows already on the current page, so a bulk import of
+  // older-dated incidents landed on a late page under "Date (newest)" and
+  // looked like it never imported. branch/vendor/device stay page-only
+  // (client-side below) since they need a join the backend's plain
+  // .distinct() query can't combine with ORDER BY in Postgres.
+  const SERVER_SORT_FIELDS: Record<string, { sort_by: string; sort_dir: string }> = {
+    date_desc: { sort_by: "date", sort_dir: "desc" },
+    date_asc: { sort_by: "date", sort_dir: "asc" },
+    status: { sort_by: "status", sort_dir: "asc" },
+    severity: { sort_by: "severity", sort_dir: "asc" },
+  };
+
   const query: Record<string, string> = {};
   if (search) query.search = search;
   if (statusFilter.length > 0) query.status_filter = statusFilter.join(",");
   if (severity) query.severity = severity;
   if (branchId) query.branch_id = branchId;
   if (vendorId) query.vendor_id = vendorId;
+  const serverSort = SERVER_SORT_FIELDS[sortBy];
+  if (serverSort) {
+    query.sort_by = serverSort.sort_by;
+    query.sort_dir = serverSort.sort_dir;
+  }
 
   const { data, page, setPage, loading, error, reload } = usePaginatedResource<Incident>("/api/v1/incidents", query);
   const branches = useLookup<Branch>("/api/v1/branches");
@@ -91,21 +110,14 @@ export default function IncidentsPage() {
     return (asset ? vendorByModel.get(asset.device_model_id)?.name : undefined) ?? "-";
   };
 
-  // Client-side sort over the current page's rows — the backend already orders by
-  // newest-first, so "Date (newest)" needs no extra work; the other options just
-  // re-sort what's already loaded rather than adding a second server-side ordering
-  // param for a handful of columns.
+  // date/status/severity are already correctly ordered by the server (see
+  // SERVER_SORT_FIELDS above) across the whole dataset, not just this page —
+  // re-sorting them here again would only reorder the 25 already-fetched
+  // rows and silently undo that. branch/vendor/device remain page-only
+  // client-side sorts (see the comment above SERVER_SORT_FIELDS).
   const sortedItems = data
     ? [...data.items].sort((a, b) => {
         switch (sortBy) {
-          case "date_asc":
-            return a.created_at.localeCompare(b.created_at);
-          case "date_desc":
-            return b.created_at.localeCompare(a.created_at);
-          case "status":
-            return a.status.localeCompare(b.status);
-          case "severity":
-            return a.severity.localeCompare(b.severity);
           case "branch":
             return branchName(a.branch_id).localeCompare(branchName(b.branch_id));
           case "vendor":
@@ -123,6 +135,88 @@ export default function IncidentsPage() {
   const [rowError, setRowError] = useState<string | null>(null);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // ---- Bulk delete ----
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectAllMatchingFilter, setSelectAllMatchingFilter] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkPreview, setBulkPreview] = useState<{
+    total_selected: number;
+    deletable_count: number;
+    blocked: { incident_id: string; description: string; blocked_by: string }[];
+  } | null>(null);
+  const [bulkResult, setBulkResult] = useState<{ deleted: number; skipped: number } | null>(null);
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    setSelectAllMatchingFilter(false);
+  }
+
+  function toggleSelectAllOnPage() {
+    const pageIds = sortedItems.map((i) => i.id);
+    const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        pageIds.forEach((id) => next.delete(id));
+      } else {
+        pageIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+    setSelectAllMatchingFilter(false);
+  }
+
+  function bulkSelectionPayload() {
+    return selectAllMatchingFilter
+      ? {
+          select_all_matching_filter: true,
+          search: search || undefined,
+          branch_id: branchId || undefined,
+          status_filter: statusFilter.length > 0 ? statusFilter.join(",") : undefined,
+          severity: severity || undefined,
+          vendor_id: vendorId || undefined,
+        }
+      : { incident_ids: Array.from(selectedIds) };
+  }
+
+  async function handlePreviewBulkDelete() {
+    setBulkError(null);
+    setBulkBusy(true);
+    try {
+      const result = await api.post<typeof bulkPreview>("/api/v1/incidents/bulk-delete/preview", bulkSelectionPayload());
+      setBulkPreview(result);
+    } catch (err) {
+      setBulkError(err instanceof ApiError ? err.message : "Failed to preview bulk delete.");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function handleConfirmBulkDelete() {
+    setBulkBusy(true);
+    try {
+      const result = await api.post<{ deleted: number; skipped: number }>("/api/v1/incidents/bulk-delete", bulkSelectionPayload());
+      setBulkResult(result);
+      setBulkPreview(null);
+      setSelectedIds(new Set());
+      setSelectAllMatchingFilter(false);
+      await reload();
+    } catch (err) {
+      setBulkError(err instanceof ApiError ? err.message : "Failed to delete selected incidents.");
+      setBulkPreview(null);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  const selectionCount = selectAllMatchingFilter ? data?.total ?? 0 : selectedIds.size;
 
   async function handleForceDelete(incidentId: string) {
     setRowError(null);
@@ -150,6 +244,11 @@ export default function IncidentsPage() {
           {hasPermission("import.create") && (
             <Link href="/imports" className="btn btn--ghost">
               Import
+            </Link>
+          )}
+          {canManage && (
+            <Link href="/incidents/replace-all" className="btn btn--ghost">
+              Replace all from Excel
             </Link>
           )}
           {hasPermission("incident.create") && (
@@ -215,12 +314,60 @@ export default function IncidentsPage() {
       </div>
 
       {rowError && <ErrorState message={rowError} />}
+      {bulkError && <ErrorState message={bulkError} />}
       {loading && <LoadingState />}
       {error && <ErrorState message={error} />}
+
+      {canManage && (selectedIds.size > 0 || selectAllMatchingFilter) && (
+        <div className="card" style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12 }}>
+          <strong>{selectionCount} incident{selectionCount === 1 ? "" : "s"} selected</strong>
+          {!selectAllMatchingFilter && (data?.total ?? 0) > selectedIds.size && (
+            <button className="btn btn--ghost" onClick={() => setSelectAllMatchingFilter(true)}>
+              Select all {data?.total} matching the current filter
+            </button>
+          )}
+          <button
+            className="btn btn--ghost"
+            onClick={() => {
+              setSelectedIds(new Set());
+              setSelectAllMatchingFilter(false);
+            }}
+          >
+            Clear selection
+          </button>
+          <button className="btn btn--danger" disabled={bulkBusy} onClick={handlePreviewBulkDelete}>
+            Delete selected
+          </button>
+        </div>
+      )}
+
       {data && (
         <>
           <DataTable<Incident>
             columns={[
+              ...(canManage
+                ? [
+                    {
+                      key: "select",
+                      header: (
+                        <input
+                          type="checkbox"
+                          aria-label="Select all on this page"
+                          checked={sortedItems.length > 0 && sortedItems.every((i) => selectedIds.has(i.id))}
+                          onChange={toggleSelectAllOnPage}
+                        />
+                      ),
+                      render: (i: Incident) => (
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${i.description}`}
+                          checked={selectAllMatchingFilter || selectedIds.has(i.id)}
+                          onChange={() => toggleSelected(i.id)}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
               {
                 key: "date",
                 header: "Date",
@@ -323,6 +470,37 @@ export default function IncidentsPage() {
         onConfirm={() => confirmDeleteId && handleForceDelete(confirmDeleteId)}
         onCancel={() => setConfirmDeleteId(null)}
       />
+
+      <ConfirmDialog
+        open={bulkPreview !== null}
+        title="Delete selected incidents"
+        message={
+          bulkPreview
+            ? bulkPreview.blocked.length === 0
+              ? `${bulkPreview.deletable_count} incident(s) will be permanently deleted (status history, ` +
+                `escalation log and document links removed with them; any linked service visit/PM/calibration ` +
+                `record is kept, just unlinked). This cannot be undone. Continue?`
+              : `${bulkPreview.deletable_count} of ${bulkPreview.total_selected} incident(s) will be deleted. ` +
+                `${bulkPreview.blocked.length} cannot be deleted — still referenced by a real procurement record ` +
+                `(e.g. ${bulkPreview.blocked[0].blocked_by}) — those will be skipped, not forced through. Continue?`
+            : ""
+        }
+        confirmLabel={bulkBusy ? "Deleting…" : "Delete"}
+        onConfirm={handleConfirmBulkDelete}
+        onCancel={() => setBulkPreview(null)}
+      />
+
+      {bulkResult && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <p style={{ margin: 0 }}>
+            Deleted {bulkResult.deleted} incident{bulkResult.deleted === 1 ? "" : "s"}
+            {bulkResult.skipped > 0 ? `, skipped ${bulkResult.skipped} (still referenced by a procurement record)` : ""}.
+          </p>
+          <button className="btn btn--ghost" style={{ marginTop: 8 }} onClick={() => setBulkResult(null)}>
+            Dismiss
+          </button>
+        </div>
+      )}
     </ProtectedShell>
   );
 }

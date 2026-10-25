@@ -16,6 +16,9 @@ MIN_HEADER_MATCHES = 2
 class ParsedRow:
     row_number: int
     raw: dict[str, object]
+    # model field name -> original formula text, only populated when this
+    # sheet's SheetConfig.detect_formulas is True. See parse_workbook.
+    formula_fields: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -68,6 +71,32 @@ def _find_header_row(all_rows: list[tuple], config: SheetConfig | None) -> tuple
     return best_index, best_headers
 
 
+def _formula_fields_by_row(path: Path, sheet_name: str, header_index: int, headers: list[str],
+                            config: SheetConfig) -> dict[int, dict[str, str]]:
+    """Second pass, formulas intact (data_only=False), only for sheets that opt in
+    via SheetConfig.detect_formulas — e.g. an Incident History workbook where a
+    stray cross-row SUM() left in a per-incident cell must never be silently
+    trusted as that row's real value (see import_service.py's incident handling).
+    Returns {row_number: {model_field_name: formula_text}}."""
+    wb = openpyxl.load_workbook(path, data_only=False, read_only=True)
+    try:
+        ws = wb[sheet_name]
+        by_row: dict[int, dict[str, str]] = {}
+        for row_offset, row in enumerate(ws.iter_rows(min_row=header_index + 2)):
+            row_number = header_index + row_offset + 2
+            for col_index, header in enumerate(headers):
+                if not header or col_index >= len(row):
+                    continue
+                cell = row[col_index]
+                if cell.data_type == "f":
+                    field_name = config.column_map.get(_norm(header))
+                    if field_name:
+                        by_row.setdefault(row_number, {})[field_name] = str(cell.value)
+        return by_row
+    finally:
+        wb.close()
+
+
 def parse_workbook(path: Path) -> list[ParsedSheet]:
     workbook = openpyxl.load_workbook(path, data_only=True, read_only=True)
     parsed_sheets: list[ParsedSheet] = []
@@ -81,6 +110,20 @@ def parse_workbook(path: Path) -> list[ParsedSheet]:
 
         config = match_config(sheet_name)
         header_index, headers = _find_header_row(all_rows, config)
+        if config is None:
+            # xlsx sheets are normally matched purely by tab name (unlike CSV,
+            # which has no tab to match and always falls back to header-overlap
+            # guessing) — but a workbook whose own sheet is generically named
+            # (e.g. literally "Sheet", openpyxl's own default) has no usable tab
+            # name at all. Falling back to the same header-overlap guess CSV
+            # already uses removes the need to rename the tab before every
+            # upload, and MIN_BEST_FIT_MATCHES still guards against misrouting a
+            # sheet that only coincidentally shares a column or two.
+            config = best_fit_config(headers)
+
+        formula_by_row: dict[int, dict[str, str]] = {}
+        if config and config.detect_formulas:
+            formula_by_row = _formula_fields_by_row(path, sheet_name, header_index, headers, config)
 
         rows: list[ParsedRow] = []
         for offset, data_row in enumerate(all_rows[header_index + 1 :]):
@@ -94,7 +137,8 @@ def parse_workbook(path: Path) -> list[ParsedSheet]:
                 if isinstance(value, str):
                     value = value.strip() or None
                 raw[header] = _json_safe_cell(value)
-            rows.append(ParsedRow(row_number=header_index + offset + 2, raw=raw))
+            row_number = header_index + offset + 2
+            rows.append(ParsedRow(row_number=row_number, raw=raw, formula_fields=formula_by_row.get(row_number, {})))
 
         parsed_sheets.append(
             ParsedSheet(name=sheet_name, config=config, headers=headers, header_row_index=header_index, rows=rows)

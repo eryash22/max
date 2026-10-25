@@ -63,6 +63,10 @@ class IncidentUpdateIn(BaseModel):
     vendor_estimate_cost_excl_gst: float | None = None
     vendor_estimate_gst_percent: float | None = None
     vendor_estimate_cost_incl_gst: float | None = None
+    device_name: str | None = None
+    manufacturer: str | None = None
+    vendor_name: str | None = None
+    remark: str | None = None
 
 
 class IncidentStatusChangeIn(BaseModel):
@@ -141,6 +145,10 @@ class IncidentOut(BaseModel):
     vendor_estimate_cost_excl_gst: float | None = None
     vendor_estimate_gst_percent: float | None = None
     vendor_estimate_cost_incl_gst: float | None = None
+    device_name: str | None = None
+    manufacturer: str | None = None
+    vendor_name: str | None = None
+    remark: str | None = None
     # Only populated by GET /incidents/{id} (detail) when asset_id is set — list
     # endpoints leave this None to avoid an extra query per row. See routers/incidents.py.
     coverage: IncidentCoverageOut | None = None
@@ -162,3 +170,71 @@ class IncidentStatusHistoryOut(BaseModel):
     notes: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+# ---- Bulk delete / Replace-all from Excel ----
+# Explicit, user-initiated destructive operations (see routers/incidents.py) — the
+# Excel workbook is the source of truth; neither of these ever runs automatically.
+
+class IncidentBulkSelectionIn(BaseModel):
+    """Either an explicit id list, or 'every row matching these filters' — the same
+    filter params list_incidents already accepts, reused rather than re-invented.
+    Shared by both the preview and the real bulk-delete endpoint so what you
+    previewed is exactly what gets deleted."""
+    incident_ids: list[str] | None = None
+    select_all_matching_filter: bool = False
+    search: str | None = None
+    branch_id: str | None = None
+    status_filter: str | None = None
+    severity: str | None = None
+    vendor_id: str | None = None
+
+
+class IncidentBulkDeleteBlockedOut(BaseModel):
+    incident_id: str
+    description: str
+    blocked_by: str  # e.g. "2 quotation(s), 1 invoice(s)"
+
+
+class IncidentBulkDeletePreviewOut(BaseModel):
+    total_selected: int
+    deletable_count: int
+    blocked: list[IncidentBulkDeleteBlockedOut] = []
+
+
+class IncidentBulkDeleteResultOut(BaseModel):
+    deleted: int
+    skipped: int
+    skipped_incidents: list[IncidentBulkDeleteBlockedOut] = []
+
+
+class IncidentReplaceAllIssueOut(BaseModel):
+    row_number: int
+    field: str | None = None
+    severity: str
+    message: str
+
+
+class IncidentReplaceAllPreviewOut(BaseModel):
+    current_incident_count: int
+    incoming_valid_rows: int
+    incoming_invalid_rows: int
+    issues: list[IncidentReplaceAllIssueOut] = []
+    # Non-empty only if at least one EXISTING incident can't be safely deleted
+    # (a real procurement record still references it) — if this is non-empty, the
+    # real replace-all endpoint will refuse entirely, atomically, per the explicit
+    # "either the complete replacement succeeds or nothing changes" requirement.
+    blocking_existing_incidents: list[IncidentBulkDeleteBlockedOut] = []
+
+
+class IncidentReplaceAllConfirmIn(BaseModel):
+    confirm_replace: bool = False
+    # Echoes the preview's current_incident_count back — guards against confirming
+    # a stale preview if the data changed (e.g. someone else deleted/added an
+    # incident) between preview and confirm.
+    expected_current_count: int
+
+
+class IncidentReplaceAllResultOut(BaseModel):
+    deleted: int
+    inserted: int

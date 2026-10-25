@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 export interface Column<T> {
-  header: string;
+  header: ReactNode;
   render: (row: T) => ReactNode;
   key: string;
 }
