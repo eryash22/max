@@ -89,11 +89,11 @@ export default function IncidentsPage() {
   const branches = useLookup<Branch>("/api/v1/branches");
   const branchName = (id: string) => branches.find((b) => b.id === id)?.name ?? id;
 
-  // Device name + vendor aren't stored on Incident directly — both are resolved via
-  // the reported Asset's DeviceModel (same "derive, don't duplicate" discipline the
-  // rest of the app uses for vendor/coverage). Device Catalog admin visibility isn't
-  // required here — only the handful of display fields already safe for any
-  // incident.read holder.
+  // Device name + vendor are normally resolved via the reported Asset's DeviceModel
+  // (same "derive, don't duplicate" discipline the rest of the app uses for vendor/
+  // coverage). Imported historical incidents often have no Asset link at all — their
+  // workbook's free-text Item Name/Vendor is saved directly on the Incident
+  // (device_name/vendor_name) instead, so fall back to that when there's no Asset.
   const assets = useLookup<Asset>("/api/v1/assets");
   const assetById = new Map(assets.map((a) => [a.id, a]));
   const models = useLookup<DeviceModel>("/api/v1/device-models");
@@ -103,11 +103,12 @@ export default function IncidentsPage() {
   const deviceNameFor = (i: Incident) => {
     const asset = i.asset_id ? assetById.get(i.asset_id) : undefined;
     const model = asset ? modelById.get(asset.device_model_id) : undefined;
-    return model?.name ?? "-";
+    return model?.name ?? i.device_name ?? "-";
   };
   const vendorNameFor = (i: Incident) => {
     const asset = i.asset_id ? assetById.get(i.asset_id) : undefined;
-    return (asset ? vendorByModel.get(asset.device_model_id)?.name : undefined) ?? "-";
+    const fromAsset = asset ? vendorByModel.get(asset.device_model_id)?.name : undefined;
+    return fromAsset ?? i.vendor_name ?? "-";
   };
 
   // date/status/severity are already correctly ordered by the server (see

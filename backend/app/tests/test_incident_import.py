@@ -413,6 +413,40 @@ def test_export_incidents_is_branch_scoped(admin_client, client, db_session):
     assert "Theirs" not in descriptions
 
 
+# ---- Search must cover imported rows' free-text device/vendor/remark (no Asset link) ----
+
+def test_search_finds_imported_incident_by_free_text_device_name(admin_client, db_session):
+    branch = _branch(admin_client, "Incident Search Branch")
+    db_session.add(Incident(
+        branch_id=branch["id"], description="Not working", status="OPEN",
+        device_name="Intelect Mobile Combo", manufacturer="Chattanooga", vendor_name="Orbimed",
+        remark="Vendor visit pending",
+    ))
+    db_session.commit()
+
+    for term in ("Intelect Mobile Combo", "Chattanooga", "Orbimed", "visit pending"):
+        response = admin_client.get("/api/v1/incidents", params={"search": term})
+        assert response.status_code == 200
+        descriptions = [item["description"] for item in response.json()["items"]]
+        assert "Not working" in descriptions, f"search for {term!r} did not find the imported row"
+
+
+def test_export_search_also_covers_imported_free_text_fields(admin_client, db_session):
+    branch = _branch(admin_client, "Incident Export Search Branch")
+    db_session.add(Incident(
+        branch_id=branch["id"], description="Noisy", status="OPEN",
+        device_name="Cross Trainer", manufacturer="Cosco", vendor_name="IEMCO",
+    ))
+    db_session.commit()
+
+    response = admin_client.get("/api/v1/incidents/export", params={"search": "Cross Trainer"})
+    assert response.status_code == 200
+    wb = openpyxl.load_workbook(io.BytesIO(response.content))
+    ws = wb.active
+    descriptions = [row[5].value for row in ws.iter_rows(min_row=2)]
+    assert "Noisy" in descriptions
+
+
 # ---- Every imported row is actually returned by list_incidents, across pages ----
 
 def test_every_imported_row_is_returned_by_list_incidents_across_pagination(admin_client, db_session):

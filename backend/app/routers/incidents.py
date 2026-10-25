@@ -120,6 +120,8 @@ def _incident_filter_query(
                 or_(
                     Incident.description.ilike(like), Incident.cer_number.ilike(like),
                     Incident.indent_number.ilike(like), Incident.po_number.ilike(like),
+                    Incident.device_name.ilike(like), Incident.manufacturer.ilike(like),
+                    Incident.vendor_name.ilike(like), Incident.remark.ilike(like),
                     DeviceModel.name.ilike(like), Branch.name.ilike(like), Vendor.name.ilike(like),
                 )
             )
@@ -213,6 +215,10 @@ def list_incidents(
                     Incident.cer_number.ilike(like),
                     Incident.indent_number.ilike(like),
                     Incident.po_number.ilike(like),
+                    Incident.device_name.ilike(like),
+                    Incident.manufacturer.ilike(like),
+                    Incident.vendor_name.ilike(like),
+                    Incident.remark.ilike(like),
                     DeviceModel.name.ilike(like),
                     Branch.name.ilike(like),
                     Vendor.name.ilike(like),

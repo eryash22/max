@@ -344,6 +344,22 @@ export default function IncidentDetailPage() {
                   )}
                 </td>
               </tr>
+              {!incident.asset_id && (incident.device_name || incident.manufacturer || incident.vendor_name) && (
+                <>
+                  <tr>
+                    <td>Device name (from import)</td>
+                    <td>{incident.device_name ?? "-"}</td>
+                  </tr>
+                  <tr>
+                    <td>Make (from import)</td>
+                    <td>{incident.manufacturer ?? "-"}</td>
+                  </tr>
+                  <tr>
+                    <td>Vendor (from import)</td>
+                    <td>{incident.vendor_name ?? "-"}</td>
+                  </tr>
+                </>
+              )}
               <tr>
                 <td>Date reported</td>
                 <td>{incident.created_at.slice(0, 10)}</td>
@@ -380,6 +396,12 @@ export default function IncidentDetailPage() {
                 <td>Downtime (hours)</td>
                 <td>{incident.downtime_hours ?? "Not recorded"}</td>
               </tr>
+              {incident.remark && (
+                <tr>
+                  <td>Remark (from import)</td>
+                  <td>{incident.remark}</td>
+                </tr>
+              )}
               <tr>
                 <td>CER No.</td>
                 <td>{incident.cer_number ?? "-"}</td>
